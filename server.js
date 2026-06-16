@@ -659,7 +659,7 @@ app.post('/api/config/tokens', (req, res) => {
     }
 });
 
-// AWS EKS Status Endpoint - lists all EKS clusters and their node groups
+// AWS EKS Status Endpoint - lists all EKS clusters, node groups, and cost estimates
 app.get('/api/eks/status', async (req, res) => {
     try {
         const { eks } = getAwsClients(req);
@@ -681,18 +681,32 @@ app.get('/api/eks/status', async (req, res) => {
 
                 const nodeGroups = await Promise.all(ngNames.map(ng =>
                     eks.send(new DescribeNodegroupCommand({ clusterName: name, nodegroupName: ng }))
-                        .then(r => ({
-                            name: r.nodegroup.nodegroupName,
-                            status: r.nodegroup.status,
-                            instanceType: r.nodegroup.instanceTypes?.[0] || 'unknown',
-                            desired: r.nodegroup.scalingConfig?.desiredSize ?? 0,
-                            min: r.nodegroup.scalingConfig?.minSize ?? 0,
-                            max: r.nodegroup.scalingConfig?.maxSize ?? 0,
-                            amiType: r.nodegroup.amiType || 'AL2_x86_64',
-                            createdAt: r.nodegroup.createdAt
-                        }))
+                        .then(r => {
+                            const instanceType = r.nodegroup.instanceTypes?.[0] || 't3.medium';
+                            const desired = r.nodegroup.scalingConfig?.desiredSize ?? 0;
+                            const costInfo = getEc2CostEstimate(instanceType);
+                            const nodeGroupMonthlyCost = parseFloat(costInfo.monthlyEstimate) * desired;
+                            return {
+                                name: r.nodegroup.nodegroupName,
+                                status: r.nodegroup.status,
+                                instanceType,
+                                desired,
+                                min: r.nodegroup.scalingConfig?.minSize ?? 0,
+                                max: r.nodegroup.scalingConfig?.maxSize ?? 0,
+                                amiType: r.nodegroup.amiType || 'AL2_x86_64',
+                                createdAt: r.nodegroup.createdAt,
+                                hourlyCostPerNode: parseFloat(costInfo.hourlyRate || 0),
+                                monthlyCost: nodeGroupMonthlyCost.toFixed(2)
+                            };
+                        })
                         .catch(() => null)
                 ));
+
+                const validNGs = nodeGroups.filter(Boolean);
+                const nodeGroupTotal = validNGs.reduce((s, ng) => s + parseFloat(ng.monthlyCost || 0), 0);
+                // EKS control plane = $0.10/h = ~$73/month per cluster
+                const controlPlaneCost = 73.00;
+                const totalMonthlyCost = (nodeGroupTotal + controlPlaneCost).toFixed(2);
 
                 return {
                     name: cluster.name,
@@ -703,7 +717,10 @@ app.get('/api/eks/status', async (req, res) => {
                     roleArn: cluster.roleArn,
                     createdAt: cluster.createdAt,
                     tags: cluster.tags || {},
-                    nodeGroups: nodeGroups.filter(Boolean)
+                    nodeGroups: validNGs,
+                    nodeGroupMonthlyCost: nodeGroupTotal.toFixed(2),
+                    controlPlaneMonthlyCost: controlPlaneCost.toFixed(2),
+                    totalMonthlyCost
                 };
             } catch (e) {
                 console.error('Error describing EKS cluster', name, e.message);
@@ -796,7 +813,7 @@ const getS3CostEstimate = (bucketName) => {
 // Endpoint to get all AWS resources (EC2 instances, S3 buckets, VPCs, Subnets, Security Groups)
 app.get('/api/resources', async (req, res) => {
     try {
-        const { ec2, s3 } = getAwsClients(req);
+        const { ec2, s3, eks } = getAwsClients(req);
         const resources = [];
         
         // 1. Fetch EC2 instances (all states)

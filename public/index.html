@@ -1341,9 +1341,10 @@
             const refreshIcon = document.getElementById('k8s-refresh-icon');
             if (refreshIcon) refreshIcon.classList.add('animate-spin');
 
-            const loader    = document.getElementById('k8s-loader');
+            const loader     = document.getElementById('k8s-loader');
             const errorState = document.getElementById('k8s-error-state');
-            const content   = document.getElementById('k8s-content');
+            const content    = document.getElementById('k8s-content');
+            if (!loader || !errorState || !content) return; // view not yet in DOM
 
             loader.classList.remove('hidden');
             errorState.classList.add('hidden');
@@ -1403,9 +1404,10 @@
                                 <td class="py-3 text-slate-300">${ng.desired} <span class="text-slate-500 text-xs">(${ng.min}–${ng.max})</span></td>
                                 <td class="py-3 text-xs text-slate-400">${ng.amiType}</td>
                                 <td class="py-3 text-xs ${ngStatusColor} font-semibold">${ng.status}</td>
+                                <td class="py-3 text-xs text-green-400 font-semibold">$${ng.monthlyCost || '0.00'}/mo</td>
                                 <td class="py-3 text-slate-400 text-xs">${ng.createdAt ? formatAge(ng.createdAt) : 'N/A'}</td>
                             </tr>`;
-                    }).join('') || `<tr><td colspan="6" class="py-4 text-center text-muted-foreground italic text-sm">No node groups configured.</td></tr>`;
+                    }).join('') || `<tr><td colspan="7" class="py-4 text-center text-muted-foreground italic text-sm">No node groups configured.</td></tr>`;
 
                     return `
                         <div class="glass-panel p-6 border border-cyan-800/30 card-hover">
@@ -1421,9 +1423,18 @@
                                     <h2 class="text-2xl font-bold text-white">${cluster.name}</h2>
                                     <p class="text-sm text-muted-foreground mt-1">Kubernetes <strong class="text-slate-300">v${cluster.version}</strong> &nbsp;•&nbsp; Created ${formatAge(cluster.createdAt)} ago</p>
                                 </div>
-                                <div class="text-right shrink-0">
-                                    <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">API Endpoint</div>
-                                    <code class="text-xs text-cyan-300 font-mono break-all">${cluster.endpoint ? cluster.endpoint.replace('https://', '') : 'Private'}</code>
+                                <div class="text-right shrink-0 space-y-2">
+                                    <div>
+                                        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Est. Monthly Cost</div>
+                                        <div class="text-2xl font-bold text-green-400">$${cluster.totalMonthlyCost || '73.00'}</div>
+                                    </div>
+                                    <div class="text-xs text-slate-500 space-y-0.5 text-right">
+                                        <div>Control plane: <span class="text-slate-400">$${cluster.controlPlaneMonthlyCost || '73.00'}</span></div>
+                                        <div>Node groups: <span class="text-slate-400">$${cluster.nodeGroupMonthlyCost || '0.00'}</span></div>
+                                    </div>
+                                    <div class="text-[10px] text-slate-500">
+                                        <code class="break-all">${cluster.endpoint ? cluster.endpoint.replace('https://', '') : 'Private endpoint'}</code>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1440,6 +1451,7 @@
                                                 <th class="pb-2 font-semibold">Nodes (min–max)</th>
                                                 <th class="pb-2 font-semibold">AMI Type</th>
                                                 <th class="pb-2 font-semibold">Status</th>
+                                                <th class="pb-2 font-semibold">Monthly Cost</th>
                                                 <th class="pb-2 font-semibold">Age</th>
                                             </tr>
                                         </thead>
@@ -1448,6 +1460,7 @@
                                 </div>
                             </div>
                         </div>`;
+
                 }).join('');
 
             } catch (err) {
@@ -1503,7 +1516,7 @@
             fetchLogins();
             fetchSpending();
             initializeWebMCP();
-            refreshK8sData();
+            // K8s tab data loaded on demand when user clicks the Kubernetes tab (showView calls refreshK8sData)
             startRefreshInterval();
             
             // Check if AWS profile supports SSO, otherwise hide the login button
