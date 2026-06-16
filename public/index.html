@@ -161,6 +161,7 @@
                 <a href="#" onclick="showView('projects')" id="nav-projects" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">My Projects</a>
                 <a href="gitlab/index.html" id="nav-gitlab" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">GitLab</a>
                 <a href="github/index.html" id="nav-github" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">GitHub</a>
+                <a href="#" onclick="showView('k8s')" id="nav-k8s" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">Kubernetes</a>
                 <a href="#" onclick="showView('settings')" id="nav-settings" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">Settings</a>
                 <div class="w-px h-6 bg-border mx-2"></div>
                 <button id="theme-toggle-btn" onclick="toggleTheme()" class="hover:bg-muted text-muted-foreground hover:text-foreground p-2 rounded-md transition-colors flex items-center justify-center w-9 h-9" title="Toggle theme">
@@ -423,6 +424,175 @@
                 <!-- Project cards will be rendered here dynamically -->
             </div>
         </div>
+
+        <div id="view-k8s" style="display: none;">
+            <header class="mb-10 flex justify-between items-center">
+                <div>
+                    <h1 class="text-4xl font-bold tracking-tight">Kubernetes Review</h1>
+                    <p class="text-muted-foreground mt-2 font-medium">Active telemetry for local review cluster <code class="bg-secondary px-1.5 py-0.5 rounded text-xs text-primary border border-border" id="k8s-active-context">k3d-review-cluster</code></p>
+                </div>
+                <button onclick="refreshK8sData()" class="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium text-sm py-2 px-4 rounded-md border border-border shadow-sm transition-colors flex items-center gap-2">
+                    <i class="fa-solid fa-arrows-rotate" id="k8s-refresh-icon"></i> Refresh Cluster
+                </button>
+            </header>
+
+            <!-- Deployed Web App Card -->
+            <div class="glass-panel p-6 mb-8 border border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
+                <!-- Glowing accent background -->
+                <div class="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-transparent pointer-events-none"></div>
+                
+                <div class="relative z-10">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-primary/20 text-primary border-primary/40">WEB APPLICATION</span>
+                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span class="text-xs text-green-500 font-semibold" id="k8s-app-status">Active</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-white">NGINX Hello App</h2>
+                    <p class="text-sm text-muted-foreground mt-1 max-w-xl">
+                        A lightweight web application running inside the <code>review-app</code> namespace, exposed via Traefik Ingress on your host's port 8095.
+                    </p>
+                </div>
+                
+                <div class="relative z-10 flex gap-4 w-full md:w-auto">
+                    <a href="http://localhost:8095" target="_blank" class="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5 px-6 rounded-md shadow-sm transition-all flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open App
+                    </a>
+                </div>
+            </div>
+
+            <!-- Loader -->
+            <div id="k8s-loader" class="text-center py-12 hidden">
+                <div class="loader mx-auto"></div>
+                <p class="text-muted-foreground mt-4 text-sm font-medium">Querying Kubernetes cluster telemetry...</p>
+            </div>
+
+            <div id="k8s-error-state" class="glass-panel p-12 text-center text-muted-foreground max-w-xl mx-auto hidden">
+                <i class="fa-solid fa-triangle-exclamation text-4xl mb-4 text-destructive"></i>
+                <h3 class="text-lg font-semibold text-foreground mb-2">Cluster Telemetry Failed</h3>
+                <p class="text-sm text-muted-foreground mb-6 font-medium" id="k8s-error-msg">
+                    Unable to fetch cluster resources. Please verify that your local k3d server is running.
+                </p>
+            </div>
+
+            <!-- Cluster Telemetry Content -->
+            <div id="k8s-content" class="space-y-8">
+                <!-- Summary Stats -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="glass-panel p-5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Nodes</span>
+                                <span class="text-3xl font-bold text-white mt-1 block" id="k8s-nodes-count">0</span>
+                            </div>
+                            <div class="bg-blue-500/10 p-3 rounded-lg text-blue-400">
+                                <i class="fa-solid fa-server text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Deployments</span>
+                                <span class="text-3xl font-bold text-white mt-1 block" id="k8s-deps-count">0</span>
+                            </div>
+                            <div class="bg-purple-500/10 p-3 rounded-lg text-purple-400">
+                                <i class="fa-solid fa-cubes text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Running Pods</span>
+                                <span class="text-3xl font-bold text-white mt-1 block" id="k8s-pods-count">0</span>
+                            </div>
+                            <div class="bg-emerald-500/10 p-3 rounded-lg text-emerald-400">
+                                <i class="fa-solid fa-cube text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nodes List -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-server text-primary"></i> Cluster Nodes
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-muted-foreground border-b border-border">
+                                <tr>
+                                    <th class="pb-3 font-semibold">Name</th>
+                                    <th class="pb-3 font-semibold">Status</th>
+                                    <th class="pb-3 font-semibold">Roles</th>
+                                    <th class="pb-3 font-semibold">Version</th>
+                                    <th class="pb-3 font-semibold">OS / Arch</th>
+                                    <th class="pb-3 font-semibold">Age</th>
+                                </tr>
+                            </thead>
+                            <tbody id="k8s-nodes-list" class="divide-y divide-border">
+                                <tr>
+                                    <td colspan="6" class="py-4 text-center text-muted-foreground italic">No nodes detected.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Deployments List -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-cubes text-primary"></i> Deployments
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-muted-foreground border-b border-border">
+                                <tr>
+                                    <th class="pb-3 font-semibold">Namespace</th>
+                                    <th class="pb-3 font-semibold">Name</th>
+                                    <th class="pb-3 font-semibold">Ready / Replicas</th>
+                                    <th class="pb-3 font-semibold">Up-to-date</th>
+                                    <th class="pb-3 font-semibold">Available</th>
+                                    <th class="pb-3 font-semibold">Age</th>
+                                </tr>
+                            </thead>
+                            <tbody id="k8s-deps-list" class="divide-y divide-border">
+                                <tr>
+                                    <td colspan="6" class="py-4 text-center text-muted-foreground italic">No deployments detected.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pods List -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-cube text-primary"></i> Pods
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-muted-foreground border-b border-border">
+                                <tr>
+                                    <th class="pb-3 font-semibold">Namespace</th>
+                                    <th class="pb-3 font-semibold">Name</th>
+                                    <th class="pb-3 font-semibold">Status</th>
+                                    <th class="pb-3 font-semibold">IP</th>
+                                    <th class="pb-3 font-semibold">Node</th>
+                                    <th class="pb-3 font-semibold">Restarts</th>
+                                    <th class="pb-3 font-semibold">Age</th>
+                                </tr>
+                            </thead>
+                            <tbody id="k8s-pods-list" class="divide-y divide-border">
+                                <tr>
+                                    <td colspan="7" class="py-4 text-center text-muted-foreground italic">No pods detected.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Shared Assistant dynamic widget is injected by shared-assistant.js -->
@@ -477,6 +647,41 @@
                     return new Response(JSON.stringify({
                         github: localStorage.getItem('gh_pat') || '',
                         gitlab: ''
+                    }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                if (urlString.includes('/api/k8s/status')) {
+                    return new Response(JSON.stringify({
+                        success: true,
+                        context: 'k3d-review-cluster',
+                        nodes: [
+                            {
+                                metadata: { name: "k3d-review-cluster-server-0", creationTimestamp: new Date(Date.now() - 86400000 * 2).toISOString() },
+                                status: {
+                                    conditions: [{ type: "Ready", status: "True" }],
+                                    nodeInfo: { kubeletVersion: "v1.30.4+k3s1", osImage: "K3s dev OS", architecture: "amd64" }
+                                }
+                            }
+                        ],
+                        deployments: [
+                            {
+                                metadata: { name: "hello-deployment", namespace: "review-app", creationTimestamp: new Date(Date.now() - 3600000 * 12).toISOString() },
+                                status: { replicas: 1, readyReplicas: 1, updatedReplicas: 1, availableReplicas: 1 }
+                            }
+                        ],
+                        pods: [
+                            {
+                                metadata: { name: "hello-deployment-54d7d47d9d-njmds", namespace: "review-app", creationTimestamp: new Date(Date.now() - 3600000 * 12).toISOString() },
+                                spec: { nodeName: "k3d-review-cluster-server-0" },
+                                status: {
+                                    phase: "Running",
+                                    podIP: "10.42.0.5",
+                                    containerStatuses: [{ restartCount: 0 }]
+                                }
+                            }
+                        ]
                     }), {
                         status: 200,
                         headers: { 'Content-Type': 'application/json' }
@@ -588,6 +793,7 @@
             document.getElementById('view-aws').style.display = viewId === 'aws' ? 'block' : 'none';
             document.getElementById('view-settings').style.display = viewId === 'settings' ? 'block' : 'none';
             document.getElementById('view-projects').style.display = viewId === 'projects' ? 'block' : 'none';
+            document.getElementById('view-k8s').style.display = viewId === 'k8s' ? 'block' : 'none';
             
             // Update active state
             document.getElementById('nav-aws').className = viewId === 'aws' 
@@ -602,8 +808,15 @@
                 ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
                 : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
                 
+            if (document.getElementById('nav-k8s')) {
+                document.getElementById('nav-k8s').className = viewId === 'k8s'
+                    ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
+                    : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
+            }
+                
             if (viewId === 'settings') loadSettings();
             if (viewId === 'projects') refreshProjects();
+            if (viewId === 'k8s') refreshK8sData();
         }
 
         async function loadSettings() {
@@ -1185,6 +1398,183 @@
                 console.log("WebMCP not natively supported by this browser. Extensions like Copilot or Gemini can inject polyfills to access window.dashboardState.");
             }
         }
+        function formatAge(creationTimestamp) {
+            if (!creationTimestamp) return 'N/A';
+            const ageMs = Date.now() - new Date(creationTimestamp);
+            const secs = Math.floor(ageMs / 1000);
+            const mins = Math.floor(secs / 60);
+            const hours = Math.floor(mins / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (days > 0) return `${days}d`;
+            if (hours > 0) return `${hours}h`;
+            if (mins > 0) return `${mins}m`;
+            return `${secs}s`;
+        }
+
+        async function refreshK8sData() {
+            const refreshIcon = document.getElementById('k8s-refresh-icon');
+            if (refreshIcon) refreshIcon.classList.add('animate-spin');
+            
+            const loader = document.getElementById('k8s-loader');
+            const errorState = document.getElementById('k8s-error-state');
+            const content = document.getElementById('k8s-content');
+            
+            loader.classList.remove('hidden');
+            errorState.classList.add('hidden');
+            content.classList.add('hidden');
+            
+            try {
+                const res = await fetch('/api/k8s/status');
+                const data = await res.json();
+                
+                if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                loader.classList.add('hidden');
+                
+                if (data.success) {
+                    content.classList.remove('hidden');
+                    
+                    document.getElementById('k8s-active-context').innerText = data.context || 'k3d-review-cluster';
+                    
+                    // Render Nodes
+                    const nodes = data.nodes || [];
+                    document.getElementById('k8s-nodes-count').innerText = nodes.length;
+                    const nodesList = document.getElementById('k8s-nodes-list');
+                    if (nodes.length > 0) {
+                        nodesList.innerHTML = nodes.map(n => {
+                            const statusObj = n.status || {};
+                            const conds = statusObj.conditions || [];
+                            const readyCond = conds.find(c => c.type === 'Ready') || {};
+                            const isReady = readyCond.status === 'True';
+                            const statusBadge = isReady 
+                                ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 flex items-center gap-1 w-fit"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Ready</span>'
+                                : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/30 flex items-center gap-1 w-fit"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>NotReady</span>';
+                            
+                            const labels = n.metadata.labels || {};
+                            const roles = Object.keys(labels)
+                                .filter(k => k.startsWith('node-role.kubernetes.io/'))
+                                .map(k => k.split('/').pop())
+                                .join(', ') || 'worker';
+                                
+                            const info = statusObj.nodeInfo || {};
+                            return `
+                                <tr class="hover:bg-slate-800/20 transition-colors">
+                                    <td class="py-4 font-semibold text-white font-mono">${n.metadata.name}</td>
+                                    <td class="py-4">${statusBadge}</td>
+                                    <td class="py-4 text-slate-300 font-medium">${roles}</td>
+                                    <td class="py-4 font-mono text-xs text-slate-400">${info.kubeletVersion || 'N/A'}</td>
+                                    <td class="py-4 text-xs text-slate-400">${info.osImage || 'N/A'} (${info.architecture || 'N/A'})</td>
+                                    <td class="py-4 text-slate-400">${formatAge(n.metadata.creationTimestamp)}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                    } else {
+                        nodesList.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-muted-foreground italic">No nodes detected.</td></tr>';
+                    }
+                    
+                    // Render Deployments
+                    const deps = data.deployments || [];
+                    document.getElementById('k8s-deps-count').innerText = deps.length;
+                    const depsList = document.getElementById('k8s-deps-list');
+                    if (deps.length > 0) {
+                        depsList.innerHTML = deps.map(d => {
+                            const statusObj = d.status || {};
+                            const ready = statusObj.readyReplicas || 0;
+                            const replicas = statusObj.replicas || 0;
+                            const upToDate = statusObj.updatedReplicas || 0;
+                            const available = statusObj.availableReplicas || 0;
+                            return `
+                                <tr class="hover:bg-slate-800/20 transition-colors">
+                                    <td class="py-4 text-slate-400 font-mono text-xs">${d.metadata.namespace}</td>
+                                    <td class="py-4 font-semibold text-white">${d.metadata.name}</td>
+                                    <td class="py-4 font-semibold ${ready === replicas ? 'text-green-400' : 'text-amber-400'}">${ready} / ${replicas}</td>
+                                    <td class="py-4 text-slate-300">${upToDate}</td>
+                                    <td class="py-4 text-slate-300">${available}</td>
+                                    <td class="py-4 text-slate-400">${formatAge(d.metadata.creationTimestamp)}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                    } else {
+                        depsList.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-muted-foreground italic">No deployments detected.</td></tr>';
+                    }
+                    
+                    // Render Pods
+                    const pods = data.pods || [];
+                    document.getElementById('k8s-pods-count').innerText = pods.filter(p => (p.status || {}).phase === 'Running').length;
+                    const podsList = document.getElementById('k8s-pods-list');
+                    if (pods.length > 0) {
+                        podsList.innerHTML = pods.map(p => {
+                            const statusObj = p.status || {};
+                            const phase = statusObj.phase || 'Unknown';
+                            
+                            let statusClass = 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+                            let dotClass = 'bg-slate-400';
+                            if (phase === 'Running') {
+                                statusClass = 'bg-green-500/10 text-green-400 border-green-500/30';
+                                dotClass = 'bg-green-500';
+                            } else if (phase === 'Pending') {
+                                statusClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+                                dotClass = 'bg-amber-500';
+                            } else if (phase === 'Failed') {
+                                statusClass = 'bg-red-500/10 text-red-400 border-red-500/30';
+                                dotClass = 'bg-red-500';
+                            }
+                            
+                            const statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold ${statusClass} border flex items-center gap-1 w-fit"><span class="w-1.5 h-1.5 rounded-full ${dotClass}"></span>${phase}</span>`;
+                            
+                            const containerStatuses = statusObj.containerStatuses || [];
+                            const restarts = containerStatuses.reduce((acc, c) => acc + (c.restartCount || 0), 0);
+                            
+                            return `
+                                <tr class="hover:bg-slate-800/20 transition-colors">
+                                    <td class="py-4 text-slate-400 font-mono text-xs">${p.metadata.namespace}</td>
+                                    <td class="py-4 font-semibold text-white font-mono text-xs">${p.metadata.name}</td>
+                                    <td class="py-4">${statusBadge}</td>
+                                    <td class="py-4 font-mono text-xs text-slate-300">${statusObj.podIP || 'None'}</td>
+                                    <td class="py-4 text-slate-300 text-xs">${p.spec.nodeName || 'None'}</td>
+                                    <td class="py-4 font-semibold ${restarts > 0 ? 'text-red-400' : 'text-slate-300'}">${restarts}</td>
+                                    <td class="py-4 text-slate-400">${formatAge(p.metadata.creationTimestamp)}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                    } else {
+                        podsList.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-muted-foreground italic">No pods detected.</td></tr>';
+                    }
+                    
+                    const helloAppPod = pods.find(p => p.metadata.name.startsWith('hello-deployment') && p.metadata.namespace === 'review-app');
+                    const helloAppStatus = document.getElementById('k8s-app-status');
+                    if (helloAppPod) {
+                        const phase = helloAppPod.status.phase;
+                        if (helloAppStatus) {
+                            helloAppStatus.innerText = phase;
+                            if (phase === 'Running') {
+                                helloAppStatus.className = 'text-xs text-green-500 font-semibold';
+                                helloAppStatus.previousElementSibling.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                            } else {
+                                helloAppStatus.className = 'text-xs text-amber-500 font-semibold';
+                                helloAppStatus.previousElementSibling.className = 'w-2 h-2 rounded-full bg-amber-500';
+                            }
+                        }
+                    } else {
+                        if (helloAppStatus) {
+                            helloAppStatus.innerText = 'Not Found';
+                            helloAppStatus.className = 'text-xs text-red-500 font-semibold';
+                            helloAppStatus.previousElementSibling.className = 'w-2 h-2 rounded-full bg-red-500';
+                        }
+                    }
+                } else {
+                    document.getElementById('k8s-error-msg').innerText = data.error || 'Failed to fetch cluster telemetry.';
+                    errorState.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Kubernetes fetch error:", err);
+                if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                loader.classList.add('hidden');
+                document.getElementById('k8s-error-msg').innerText = 'Network/server error: ' + err.message;
+                errorState.classList.remove('hidden');
+            }
+        }
+
         // Shared Assistant logic loaded from shared-assistant.js at the bottom of body
 
         // Initialization
