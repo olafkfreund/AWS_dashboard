@@ -4,18 +4,21 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { exec } = require('child_process');
-const { 
-    EC2Client, 
+const { EKSClient, ListClustersCommand, DescribeClusterCommand, ListNodegroupsCommand, DescribeNodegroupCommand } = require('@aws-sdk/client-eks');
+const { LambdaClient, ListFunctionsCommand, GetFunctionUrlConfigCommand } = require('@aws-sdk/client-lambda');
+const {
+    EC2Client,
     DescribeInstancesCommand,
     DescribeVpcsCommand,
     DescribeSubnetsCommand,
-    DescribeSecurityGroupsCommand
+    DescribeSecurityGroupsCommand,
+    DescribeNatGatewaysCommand,
+    DescribeInternetGatewaysCommand
 } = require('@aws-sdk/client-ec2');
 const { CloudTrailClient, LookupEventsCommand } = require('@aws-sdk/client-cloudtrail');
 const { CostExplorerClient, GetCostAndUsageCommand } = require('@aws-sdk/client-cost-explorer');
 const { BudgetsClient, DescribeBudgetsCommand } = require('@aws-sdk/client-budgets');
 const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
-const { EKSClient, ListClustersCommand, DescribeClusterCommand, ListNodegroupsCommand, DescribeNodegroupCommand } = require('@aws-sdk/client-eks');
 const { fromIni } = require('@aws-sdk/credential-providers');
 const { SSOClient, GetRoleCredentialsCommand, ListAccountsCommand, ListAccountRolesCommand } = require("@aws-sdk/client-sso");
 const { SSOOIDCClient, RegisterClientCommand, StartDeviceAuthorizationCommand, CreateTokenCommand } = require("@aws-sdk/client-sso-oidc");
@@ -741,6 +744,7 @@ const ceClient = new CostExplorerClient(awsConfig);
 const bgClient = new BudgetsClient(awsConfig);
 const s3Client = new S3Client(awsConfig);
 const eksClient = new EKSClient(awsConfig);
+const lambdaClient = new LambdaClient(awsConfig);
 
 
 // Helper to get dynamic AWS Clients based on user SSO session
@@ -762,7 +766,8 @@ function getAwsClients(req) {
                 costexplorer: new CostExplorerClient(config),
                 budgets: new BudgetsClient(config),
                 s3: new S3Client(config),
-                eks: new EKSClient(config)
+                eks: new EKSClient(config),
+                lambda: new LambdaClient(config)
             };
         }
     }
@@ -772,7 +777,8 @@ function getAwsClients(req) {
         costexplorer: ceClient,
         budgets: bgClient,
         s3: s3Client,
-        eks: eksClient
+        eks: eksClient,
+        lambda: lambdaClient
     };
 }
 
@@ -813,7 +819,7 @@ const getS3CostEstimate = (bucketName) => {
 // Endpoint to get all AWS resources (EC2 instances, S3 buckets, VPCs, Subnets, Security Groups)
 app.get('/api/resources', async (req, res) => {
     try {
-        const { ec2, s3, eks } = getAwsClients(req);
+        const { ec2, s3, eks, lambda } = getAwsClients(req);
         const resources = [];
         
         // 1. Fetch EC2 instances (all states)
@@ -873,18 +879,21 @@ app.get('/api/resources', async (req, res) => {
             console.error('Error fetching S3 buckets:', s3Err);
         }
 
-        // 3. Fetch VPCs
+        // 3. Fetch VPCs — build a lookup map for grouping
+        const vpcNameMap = {};
         try {
-            const vpcCommand = new DescribeVpcsCommand({});
-            const vpcResponse = await ec2.send(vpcCommand);
+            const vpcResponse = await ec2.send(new DescribeVpcsCommand({}));
             if (vpcResponse.Vpcs) {
                 vpcResponse.Vpcs.forEach(vpc => {
-                    const nameTag = vpc.Tags?.find(tag => tag.Key === 'Name');
+                    const nameTag = vpc.Tags?.find(t => t.Key === 'Name');
+                    const vpcName = nameTag ? nameTag.Value : vpc.VpcId;
+                    vpcNameMap[vpc.VpcId] = vpcName;
                     resources.push({
                         id: vpc.VpcId,
-                        name: nameTag ? nameTag.Value : 'Unnamed VPC',
+                        name: vpcName,
                         type: vpc.CidrBlock,
                         service: 'VPC',
+                        group: `Network: ${vpcName}`,
                         state: 'running',
                         launchTime: null,
                         publicIp: 'N/A (Virtual Network)',
@@ -894,22 +903,21 @@ app.get('/api/resources', async (req, res) => {
                     });
                 });
             }
-        } catch (vpcErr) {
-            console.error('Error fetching VPCs:', vpcErr);
-        }
+        } catch (e) { console.error('Error fetching VPCs:', e); }
 
         // 4. Fetch Subnets
         try {
-            const subnetCommand = new DescribeSubnetsCommand({});
-            const subnetResponse = await ec2.send(subnetCommand);
+            const subnetResponse = await ec2.send(new DescribeSubnetsCommand({}));
             if (subnetResponse.Subnets) {
                 subnetResponse.Subnets.forEach(subnet => {
-                    const nameTag = subnet.Tags?.find(tag => tag.Key === 'Name');
+                    const nameTag = subnet.Tags?.find(t => t.Key === 'Name');
+                    const vpcName = vpcNameMap[subnet.VpcId] || subnet.VpcId;
                     resources.push({
                         id: subnet.SubnetId,
                         name: nameTag ? nameTag.Value : 'Unnamed Subnet',
                         type: `${subnet.CidrBlock} (${subnet.AvailabilityZone})`,
                         service: 'Subnet',
+                        group: `Network: ${vpcName}`,
                         state: 'running',
                         launchTime: null,
                         publicIp: 'N/A (Network Subnet)',
@@ -919,22 +927,21 @@ app.get('/api/resources', async (req, res) => {
                     });
                 });
             }
-        } catch (subnetErr) {
-            console.error('Error fetching Subnets:', subnetErr);
-        }
+        } catch (e) { console.error('Error fetching Subnets:', e); }
 
         // 5. Fetch Security Groups
         try {
-            const sgCommand = new DescribeSecurityGroupsCommand({});
-            const sgResponse = await ec2.send(sgCommand);
+            const sgResponse = await ec2.send(new DescribeSecurityGroupsCommand({}));
             if (sgResponse.SecurityGroups) {
                 sgResponse.SecurityGroups.forEach(sg => {
-                    const nameTag = sg.Tags?.find(tag => tag.Key === 'Name');
+                    const nameTag = sg.Tags?.find(t => t.Key === 'Name');
+                    const vpcName = sg.VpcId ? (vpcNameMap[sg.VpcId] || sg.VpcId) : 'Default';
                     resources.push({
                         id: sg.GroupId,
                         name: nameTag ? nameTag.Value : sg.GroupName,
                         type: sg.Description || 'Security Group',
                         service: 'SecurityGroup',
+                        group: `Network: ${vpcName}`,
                         state: 'running',
                         launchTime: null,
                         publicIp: 'N/A (Firewall Rules)',
@@ -944,11 +951,61 @@ app.get('/api/resources', async (req, res) => {
                     });
                 });
             }
-        } catch (sgErr) {
-            console.error('Error fetching Security Groups:', sgErr);
-        }
+        } catch (e) { console.error('Error fetching Security Groups:', e); }
 
-        // 6. Fetch EKS Clusters
+        // 6. Fetch NAT Gateways — $0.045/h per AZ = ~$32.85/mo each
+        try {
+            const natResponse = await ec2.send(new DescribeNatGatewaysCommand({ Filter: [{ Name: 'state', Values: ['available'] }] }));
+            if (natResponse.NatGateways) {
+                natResponse.NatGateways.forEach(nat => {
+                    const nameTag = nat.Tags?.find(t => t.Key === 'Name');
+                    const vpcName = nat.VpcId ? (vpcNameMap[nat.VpcId] || nat.VpcId) : 'Unknown VPC';
+                    const monthlyCost = (0.045 * 730).toFixed(2); // $32.85/mo
+                    const publicIp = nat.NatGatewayAddresses?.[0]?.PublicIp || 'N/A';
+                    resources.push({
+                        id: nat.NatGatewayId,
+                        name: nameTag ? nameTag.Value : nat.NatGatewayId,
+                        type: `NAT Gateway (${nat.SubnetId || 'unknown subnet'})`,
+                        service: 'NAT Gateway',
+                        group: `Network: ${vpcName}`,
+                        state: nat.State === 'available' ? 'running' : nat.State,
+                        launchTime: nat.CreateTime,
+                        publicIp,
+                        costEstimate: monthlyCost,
+                        lastMonthUsage: `EIP: ${publicIp}`,
+                        lastMonthCost: monthlyCost,
+                        region: process.env.AWS_REGION || 'eu-west-2'
+                    });
+                });
+            }
+        } catch (e) { console.error('Error fetching NAT Gateways:', e); }
+
+        // 7. Fetch Internet Gateways — free, but important for visibility
+        try {
+            const igwResponse = await ec2.send(new DescribeInternetGatewaysCommand({}));
+            if (igwResponse.InternetGateways) {
+                igwResponse.InternetGateways.forEach(igw => {
+                    const nameTag = igw.Tags?.find(t => t.Key === 'Name');
+                    const attachedVpcId = igw.Attachments?.[0]?.VpcId;
+                    const vpcName = attachedVpcId ? (vpcNameMap[attachedVpcId] || attachedVpcId) : 'Detached';
+                    resources.push({
+                        id: igw.InternetGatewayId,
+                        name: nameTag ? nameTag.Value : igw.InternetGatewayId,
+                        type: `Internet Gateway → ${vpcName}`,
+                        service: 'Internet Gateway',
+                        group: `Network: ${vpcName}`,
+                        state: igw.Attachments?.[0]?.State === 'available' ? 'running' : 'detached',
+                        launchTime: null,
+                        publicIp: 'N/A (Gateway)',
+                        costEstimate: '0.00',
+                        lastMonthUsage: 'N/A',
+                        lastMonthCost: '0.00'
+                    });
+                });
+            }
+        } catch (e) { console.error('Error fetching Internet Gateways:', e); }
+
+        // 8. Fetch EKS Clusters — include control plane cost and VPC group
         try {
             const eksListRes = await eks.send(new ListClustersCommand({}));
             const clusterNames = eksListRes.clusters || [];
@@ -956,8 +1013,11 @@ app.get('/api/resources', async (req, res) => {
                 try {
                     const descRes = await eks.send(new DescribeClusterCommand({ name: clusterName }));
                     const cluster = descRes.cluster;
+                    const clusterVpcName = cluster.resourcesVpcConfig?.vpcId
+                        ? (vpcNameMap[cluster.resourcesVpcConfig.vpcId] || cluster.resourcesVpcConfig.vpcId)
+                        : 'unknown';
 
-                    // Fetch node groups for cost estimation
+                    // Fetch node groups for cost
                     let nodeGroupCostTotal = 0;
                     let nodeGroupSummary = 'No node groups';
                     try {
@@ -979,26 +1039,69 @@ app.get('/api/resources', async (req, res) => {
                         console.error('Error fetching node groups for', clusterName, ngErr.message);
                     }
 
+                    // $73/mo control plane + node groups
+                    const totalCost = (73 + nodeGroupCostTotal).toFixed(2);
+
                     resources.push({
                         id: cluster.name,
                         name: cluster.name,
                         type: `EKS ${cluster.version} • ${nodeGroupSummary}`,
                         service: 'EKS',
+                        group: `EKS: ${cluster.name}`,
                         state: cluster.status === 'ACTIVE' ? 'running' : cluster.status.toLowerCase(),
                         launchTime: cluster.createdAt,
                         publicIp: cluster.endpoint ? cluster.endpoint.replace('https://', '') : 'Private Endpoint',
-                        costEstimate: nodeGroupCostTotal.toFixed(2),
+                        costEstimate: totalCost,
                         lastMonthUsage: nodeGroupSummary,
-                        lastMonthCost: nodeGroupCostTotal.toFixed(2),
-                        region: cluster.arn?.split(':')[3] || 'eu-west-2'
+                        lastMonthCost: totalCost,
+                        region: cluster.arn?.split(':')[3] || 'eu-west-2',
+                        vpcName: clusterVpcName
                     });
                 } catch (descErr) {
                     console.error('Error describing EKS cluster', clusterName, descErr.message);
                 }
             }));
-        } catch (eksErr) {
-            console.error('Error fetching EKS clusters:', eksErr.message);
-        }
+        } catch (eksErr) { console.error('Error fetching EKS clusters:', eksErr.message); }
+
+        // 9. Fetch Lambda Functions
+        try {
+            let marker;
+            const lambdaFunctions = [];
+            do {
+                const listRes = await lambda.send(new ListFunctionsCommand({ Marker: marker, MaxItems: 50 }));
+                lambdaFunctions.push(...(listRes.Functions || []));
+                marker = listRes.NextMarker;
+            } while (marker);
+
+            for (const fn of lambdaFunctions) {
+                // Try to get the Function URL if it exists
+                let functionUrl = null;
+                try {
+                    const urlRes = await lambda.send(new GetFunctionUrlConfigCommand({ FunctionName: fn.FunctionName }));
+                    functionUrl = urlRes.FunctionUrl;
+                } catch (_) { /* no URL config */ }
+
+                // Lambda cost: free tier 1M req/mo; estimate based on memory × duration
+                // Most test functions = ~$0 to $1/mo
+                const memoryCost = ((fn.MemorySize || 128) / 1024 * 0.0000166667 * 100 * 30 * 24).toFixed(2); // 100 req/day estimate
+
+                resources.push({
+                    id: fn.FunctionArn,
+                    name: fn.FunctionName,
+                    type: `Lambda ${fn.Runtime} • ${fn.MemorySize || 128}MB • ${fn.Timeout || 3}s timeout`,
+                    service: 'Lambda',
+                    group: 'Lambda Functions',
+                    state: fn.State === 'Active' || !fn.State ? 'running' : fn.State.toLowerCase(),
+                    launchTime: fn.LastModified,
+                    publicIp: functionUrl ? functionUrl.replace('https://', '').replace(/\/$/, '') : 'No public URL',
+                    costEstimate: memoryCost,
+                    lastMonthUsage: functionUrl ? 'Public Function URL' : 'Internal only',
+                    lastMonthCost: memoryCost,
+                    region: fn.FunctionArn.split(':')[3] || 'eu-west-2',
+                    functionUrl
+                });
+            }
+        } catch (lambdaErr) { console.error('Error fetching Lambda functions:', lambdaErr.message); }
 
         res.json({ success: true, count: resources.length, instances: resources });
 

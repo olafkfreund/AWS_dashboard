@@ -792,75 +792,122 @@
                 if (data.success && data.instances && data.instances.length > 0) {
                     window.dashboardState.resources = data.instances;
                     document.getElementById('resource-count').innerText = data.count;
-                    
-                    list.innerHTML = data.instances.map(inst => {
-                        let serviceBadgeColor = 'bg-slate-700/40 text-slate-300 border-slate-600/40';
-                        if (inst.service === 'S3') {
-                            serviceBadgeColor = 'bg-blue-900/40 text-blue-300 border-blue-700/40';
-                        } else if (inst.service === 'EC2') {
-                            serviceBadgeColor = 'bg-emerald-950/40 text-emerald-400 border-emerald-700/40';
-                        } else if (inst.service === 'VPC') {
-                            serviceBadgeColor = 'bg-purple-950/40 text-purple-300 border-purple-700/40';
-                        } else if (inst.service === 'Subnet') {
-                            serviceBadgeColor = 'bg-amber-950/40 text-amber-400 border-amber-700/40';
-                        } else if (inst.service === 'SecurityGroup') {
-                            serviceBadgeColor = 'bg-rose-950/40 text-rose-400 border-rose-700/40';
-                        } else if (inst.service === 'EKS') {
-                            serviceBadgeColor = 'bg-cyan-900/40 text-cyan-300 border-cyan-700/40';
-                        }
 
-                        const state = inst.state || 'running';
-                        let dotColor = 'bg-green-500';
-                        if (state === 'stopped' || state === 'deleting' || state === 'failed') {
-                            dotColor = 'bg-red-500';
-                        } else if (state === 'creating' || state === 'updating' || state === 'degraded') {
-                            dotColor = 'bg-amber-500';
-                        }
+                    // --- Group resources by their 'group' field ---
+                    const grouped = {};
+                    const groupOrder = []; // preserve insertion order
+                    data.instances.forEach(inst => {
+                        const g = inst.group || inst.service || 'Other';
+                        if (!grouped[g]) { grouped[g] = []; groupOrder.push(g); }
+                        grouped[g].push(inst);
+                    });
 
-                        const regionBadge = inst.region
-                            ? `<span class="text-[9px] font-mono bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded ml-1">${inst.region}</span>`
-                            : '';
+                    const SERVICE_COLORS = {
+                        'EC2':              'bg-emerald-950/40 text-emerald-400 border-emerald-700/40',
+                        'S3':               'bg-blue-900/40 text-blue-300 border-blue-700/40',
+                        'VPC':              'bg-purple-950/40 text-purple-300 border-purple-700/40',
+                        'Subnet':           'bg-amber-950/40 text-amber-400 border-amber-700/40',
+                        'SecurityGroup':    'bg-rose-950/40 text-rose-400 border-rose-700/40',
+                        'NAT Gateway':      'bg-orange-900/40 text-orange-300 border-orange-700/40',
+                        'Internet Gateway': 'bg-teal-900/40 text-teal-300 border-teal-700/40',
+                        'EKS':              'bg-cyan-900/40 text-cyan-300 border-cyan-700/40',
+                        'Lambda':           'bg-violet-900/40 text-violet-300 border-violet-700/40',
+                    };
+                    const GROUP_ICONS = {
+                        'EKS':     'fa-dharmachakra',
+                        'Network': 'fa-network-wired',
+                        'Lambda':  'fa-bolt',
+                        'EC2':     'fa-server',
+                        'S3':      'fa-bucket',
+                        'Other':   'fa-boxes-stacked',
+                    };
+                    const getGroupIcon = g => {
+                        for (const [k, v] of Object.entries(GROUP_ICONS)) if (g.startsWith(k)) return v;
+                        return 'fa-layer-group';
+                    };
 
-                        const statusText = inst.service === 'EC2'
-                            ? `${state.toUpperCase()} • ${inst.publicIp}`
-                            : inst.service === 'EKS'
-                            ? `${state.toUpperCase()} • ${inst.publicIp}`
-                            : inst.publicIp;
+                    list.innerHTML = groupOrder.map((groupName, gi) => {
+                        const items = grouped[groupName];
+                        const groupCost = items.reduce((s, r) => s + parseFloat(r.costEstimate || 0), 0);
+                        const groupId = `rg-${gi}`;
 
-                        // For EKS, show a link to the Kubernetes tab
-                        const isEKS = inst.service === 'EKS';
-                        const eksExtra = isEKS ? `
-                            <button onclick="showView('k8s')" class="mt-2 text-[10px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-semibold">View in Kubernetes tab →</button>
-                        ` : '';
-                        const typeLabel = isEKS ? 'EKS Cluster' : inst.type;
-                        const cardBorder = isEKS ? 'border-cyan-800/50' : 'border-slate-700';
+                        const cards = items.map(inst => {
+                            const badgeColor = SERVICE_COLORS[inst.service] || 'bg-slate-700/40 text-slate-300 border-slate-600/40';
+                            const state = inst.state || 'running';
+                            let dotColor = 'bg-green-500 animate-pulse';
+                            if (state === 'stopped' || state === 'deleting' || state === 'failed') dotColor = 'bg-red-500';
+                            else if (state === 'creating' || state === 'updating' || state === 'pending') dotColor = 'bg-amber-500';
+                            else if (state === 'detached') dotColor = 'bg-slate-500';
+
+                            const regionBadge = inst.region
+                                ? `<span class="text-[9px] font-mono bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded">${inst.region}</span>`
+                                : '';
+
+                            const isEKS = inst.service === 'EKS';
+                            const isLambda = inst.service === 'Lambda';
+                            const cardBorder = isEKS ? 'border-cyan-800/40' : isLambda ? 'border-violet-800/40' : 'border-slate-700/60';
+
+                            let extraLinks = '';
+                            if (isEKS) {
+                                extraLinks = `<button onclick="showView('k8s')" class="text-[10px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-semibold">View in Kubernetes tab →</button>`;
+                            } else if (isLambda && inst.functionUrl) {
+                                extraLinks = `<a href="${inst.functionUrl}" target="_blank" class="text-[10px] text-violet-400 hover:text-violet-300 underline underline-offset-2 font-semibold">Open Function URL ↗</a>`;
+                            }
+
+                            const costColor = parseFloat(inst.costEstimate || 0) > 0 ? 'text-emerald-400' : 'text-slate-500';
+                            const statusText = (isEKS || inst.service === 'EC2')
+                                ? `${state.toUpperCase()} • ${inst.publicIp}`
+                                : inst.publicIp;
+
+                            return `
+                                <div class="bg-slate-800/40 p-3.5 rounded-lg border ${cardBorder} card-hover">
+                                    <div class="flex justify-between items-start gap-2">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${badgeColor}">${inst.service}</span>
+                                                ${regionBadge}
+                                                <h4 class="font-semibold text-sm text-white truncate">${inst.name}</h4>
+                                            </div>
+                                            <p class="text-[10px] text-slate-500 font-mono truncate">${inst.id}</p>
+                                            ${extraLinks ? `<div class="mt-1">${extraLinks}</div>` : ''}
+                                        </div>
+                                        <div class="text-right shrink-0">
+                                            <div class="text-[9px] text-slate-500 uppercase tracking-wider">Cost/mo</div>
+                                            <div class="${costColor} font-bold text-sm">$${inst.costEstimate || '0.00'}</div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 pt-2 border-t border-slate-700/40 flex items-center gap-2 text-xs text-slate-400">
+                                        <span class="w-1.5 h-1.5 rounded-full ${dotColor} shrink-0"></span>
+                                        <span class="truncate">${statusText}</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-500 mt-1 truncate">${inst.type}</p>
+                                </div>`;
+                        }).join('');
+
+                        const hasCost = groupCost > 0;
+                        const groupIcon = getGroupIcon(groupName);
+                        const costBadge = hasCost
+                            ? `<span class="text-xs font-bold text-emerald-400 bg-emerald-900/30 border border-emerald-700/30 px-2 py-0.5 rounded-full">$${groupCost.toFixed(2)}/mo</span>`
+                            : `<span class="text-xs text-slate-500 bg-slate-800/60 border border-slate-700/30 px-2 py-0.5 rounded-full">Free</span>`;
 
                         return `
-                            <div class="bg-slate-800/50 p-4 rounded-lg border ${cardBorder} card-hover">
-                                <div class="flex justify-between items-start">
-                                    <div class="flex-1 min-w-0 mr-3">
-                                        <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${serviceBadgeColor}">${inst.service || 'EC2'}</span>
-                                            ${regionBadge}
-                                            <h3 class="font-bold text-white">${inst.name}</h3>
-                                        </div>
-                                        <p class="text-xs text-slate-400 font-mono">${inst.id}</p>
-                                        ${eksExtra}
+                            <div class="border border-slate-700/40 rounded-xl overflow-hidden">
+                                <button onclick="document.getElementById('${groupId}').classList.toggle('hidden')"
+                                    class="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 hover:bg-slate-700/40 transition-colors text-left">
+                                    <div class="flex items-center gap-3">
+                                        <i class="fa-solid ${groupIcon} text-sm text-slate-400 w-4"></i>
+                                        <span class="font-semibold text-sm text-white">${groupName}</span>
+                                        <span class="text-[10px] text-slate-500 bg-slate-700/60 px-1.5 py-0.5 rounded">${items.length} resource${items.length !== 1 ? 's' : ''}</span>
                                     </div>
-                                    <span class="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded uppercase font-semibold whitespace-nowrap shrink-0">${typeLabel}</span>
+                                    <div class="flex items-center gap-2">
+                                        ${costBadge}
+                                        <i class="fa-solid fa-chevron-down text-xs text-slate-500"></i>
+                                    </div>
+                                </button>
+                                <div id="${groupId}" class="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 bg-slate-900/30">
+                                    ${cards}
                                 </div>
-                                <div class="mt-3 pt-3 border-t border-slate-700/50 flex justify-between items-center text-sm">
-                                    <div class="text-slate-400 flex items-center text-xs">
-                                        <span class="w-2 h-2 rounded-full ${dotColor} mr-2"></span>
-                                        ${statusText}
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-[10px] text-slate-400 block">Est. Cost / Month</span>
-                                        <span class="${parseFloat(inst.costEstimate || 0) > 0 ? 'text-emerald-400' : 'text-slate-400'} font-bold">$${inst.costEstimate || '0.00'}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+                            </div>`;
                     }).join('');
 
                 } else {
