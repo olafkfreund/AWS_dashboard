@@ -701,7 +701,8 @@ app.get('/api/eks/status', async (req, res) => {
                 const nodeGroups = await Promise.all(ngNames.map(ng =>
                     eks.send(new DescribeNodegroupCommand({ clusterName: name, nodegroupName: ng }))
                         .then(r => {
-                            const instanceType = r.nodegroup.instanceTypes?.[0] || 't3.medium';
+                            const instanceTypes = r.nodegroup.instanceTypes || ['t3.medium'];
+                            const instanceType = instanceTypes[0];
                             const desired = r.nodegroup.scalingConfig?.desiredSize ?? 0;
                             const costInfo = getEc2CostEstimate(instanceType);
                             const nodeGroupMonthlyCost = parseFloat(costInfo.monthlyEstimate) * desired;
@@ -709,11 +710,14 @@ app.get('/api/eks/status', async (req, res) => {
                                 name: r.nodegroup.nodegroupName,
                                 status: r.nodegroup.status,
                                 instanceType,
+                                instanceTypes,
+                                capacityType: r.nodegroup.capacityType || 'ON_DEMAND',
                                 desired,
                                 min: r.nodegroup.scalingConfig?.minSize ?? 0,
                                 max: r.nodegroup.scalingConfig?.maxSize ?? 0,
                                 amiType: r.nodegroup.amiType || 'AL2_x86_64',
                                 createdAt: r.nodegroup.createdAt,
+                                nodeRole: r.nodegroup.nodeRole,
                                 hourlyCostPerNode: parseFloat(costInfo.hourlyRate || 0),
                                 monthlyCost: nodeGroupMonthlyCost.toFixed(2)
                             };
@@ -736,7 +740,13 @@ app.get('/api/eks/status', async (req, res) => {
                     roleArn: cluster.roleArn,
                     createdAt: cluster.createdAt,
                     tags: cluster.tags || {},
+                    vpcId: cluster.resourcesVpcConfig?.vpcId || null,
+                    subnetCount: cluster.resourcesVpcConfig?.subnetIds?.length || 0,
+                    publicAccess: cluster.resourcesVpcConfig?.endpointPublicAccess ?? true,
+                    privateAccess: cluster.resourcesVpcConfig?.endpointPrivateAccess ?? true,
+                    loggingEnabled: (cluster.logging?.clusterLogging || []).some(l => l.enabled),
                     nodeGroups: validNGs,
+                    totalNodes: validNGs.reduce((s, ng) => s + (ng.desired || 0), 0),
                     nodeGroupMonthlyCost: nodeGroupTotal.toFixed(2),
                     controlPlaneMonthlyCost: controlPlaneCost.toFixed(2),
                     totalMonthlyCost
