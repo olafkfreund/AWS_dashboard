@@ -867,6 +867,9 @@
       // 1. Fetch Repositories
       const repos = await ghFetch('/user/repos?sort=updated&per_page=100');
       state.repos = repos;
+      try {
+        localStorage.setItem('gh_active_repos', JSON.stringify(repos || []));
+      } catch(e) { console.error(e); }
       
       // Calculate total stars
       state.totalStars = repos.reduce((acc, repo) => acc + (repo.stargazers_count || 0), 0);
@@ -888,6 +891,9 @@
       );
       const prsResults = await Promise.all(prsPromises);
       state.prs = prsResults.flatMap(res => res.items || []);
+      try {
+        localStorage.setItem('gh_active_prs', JSON.stringify(state.prs || []));
+      } catch(e) { console.error(e); }
       const totalPrsCount = prsResults.reduce((acc, res) => acc + (res.total_count || 0), 0);
       el.statActivePrs.textContent = totalPrsCount !== undefined ? totalPrsCount : state.prs.length;
 
@@ -897,6 +903,9 @@
       );
       const issuesResults = await Promise.all(issuesPromises);
       state.issues = issuesResults.flatMap(res => res.items || []);
+      try {
+        localStorage.setItem('gh_active_issues', JSON.stringify(state.issues || []));
+      } catch(e) { console.error(e); }
       const totalIssuesCount = issuesResults.reduce((acc, res) => acc + (res.total_count || 0), 0);
       el.statOpenIssues.textContent = totalIssuesCount !== undefined ? totalIssuesCount : state.issues.length;
 

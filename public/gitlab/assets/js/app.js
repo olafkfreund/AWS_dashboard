@@ -863,6 +863,9 @@
       // 1. Fetch Projects (repos equivalent)
       const projects = await glFetch('/projects?membership=true&simple=true&per_page=50&order_by=updated_at');
       state.repos = projects;
+      try {
+        localStorage.setItem('gl_active_repos', JSON.stringify(projects || []));
+      } catch(e) { console.error(e); }
       
       // Calculate total stars
       state.totalStars = projects.reduce((acc, proj) => acc + (proj.star_count || 0), 0);
@@ -881,6 +884,9 @@
       mrsAssigned.forEach(mr => mrsMap.set(mr.id, mr));
       const mrs = Array.from(mrsMap.values());
       state.prs = mrs;
+      try {
+        localStorage.setItem('gl_active_mrs', JSON.stringify(mrs || []));
+      } catch(e) { console.error(e); }
       el.statActivePrs.textContent = mrs.length;
 
       // 3. Fetch Open Issues - using user-centric scopes to avoid GitLab.com scope=all timeout
@@ -893,6 +899,9 @@
       issuesAssigned.forEach(issue => issuesMap.set(issue.id, issue));
       const issues = Array.from(issuesMap.values());
       state.issues = issues;
+      try {
+        localStorage.setItem('gl_active_issues', JSON.stringify(issues || []));
+      } catch(e) { console.error(e); }
       el.statOpenIssues.textContent = issues.length;
 
       // Prioritize followed projects, falling back to top recently updated ones if followed list is small

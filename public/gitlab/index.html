@@ -771,41 +771,7 @@
         <button class="btn btn-primary btn-sm" id="btn-disconnect-token"><i class="fa-solid fa-trash-can"></i> Disconnect & Clear Local Cache</button>
       </div>
 
-      <div class="card mb-6">
-        <h4 class="mb-4"><i class="fa-solid fa-robot"></i> Assistant & LLM Configuration</h4>
-        <div class="form-group mb-3">
-          <label class="form-label" for="settings-copilot-provider">LLM Provider</label>
-          <select id="settings-copilot-provider" class="form-control" style="max-width: 300px;">
-            <option value="github">GitHub Models (GPT-4o)</option>
-            <option value="ollama">Ollama (Local LLM)</option>
-            <option value="gemini">Gemini</option>
-            <option value="claude">Claude</option>
-            <option value="github-copilot" selected>GitHub Copilot</option>
-            <option value="gitlab-duo">GitLab Duo</option>
-            <option value="aws-q">AWS Q (Cloud)</option>
-    
-          </select>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label" for="settings-copilot-pat">Dedicated GitHub PAT (Optional)</label>
-          <input type="password" id="settings-copilot-pat" class="form-control" style="max-width: 400px;" placeholder="ghp_... (Overrides dashboard token)">
-          <p style="font-size: 11px; color: var(--fg-secondary); margin-top: 4px; margin-bottom: 0;">Use this if your default connection does not have permissions for GitHub Copilot or Models.</p>
-        </div>
-        <div class="form-group mb-3" style="display: flex; gap: 16px; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 200px;">
-            <label class="form-label" for="settings-copilot-ollama-url">Ollama URL</label>
-            <input type="text" id="settings-copilot-ollama-url" class="form-control" placeholder="http://localhost:11434">
-          </div>
-          <div style="flex: 1; min-width: 200px;">
-            <label class="form-label" for="settings-copilot-ollama-model">Ollama Model</label>
-            <input type="text" id="settings-copilot-ollama-model" class="form-control" placeholder="llama3 or mistral">
-          </div>
-        </div>
-        <div class="flex-align" style="gap: 12px;">
-          <button class="btn btn-primary btn-sm" id="btn-save-settings-copilot"><i class="fa-solid fa-floppy-disk"></i> Save Assistant Settings</button>
-          <span id="settings-copilot-status" style="font-size: 12px; color: var(--green); font-weight: bold;"></span>
-        </div>
-      </div>
+      <!-- Assistant Configuration is now managed in the unified chat popup -->
 
       <div class="card">
         <h4 class="mb-4"><i class="fa-solid fa-sliders"></i> Interface Options</h4>
@@ -856,139 +822,12 @@
 <!-- Toast Notifications Container -->
 <div class="toast-container" id="toast-container"></div>
 
-<!-- Floating Assistant Button -->
-<button class="copilot-badge-btn" id="copilot-chat-btn" title="Ask Duo Assistant">
-  <i class="fa-solid fa-robot"></i>
-</button>
-
-<!-- Duo Chat Popup -->
-<div class="copilot-chat-popup" id="copilot-chat-popup">
-  <div class="copilot-chat-header">
-    <div class="copilot-chat-header-title">
-      <span class="copilot-status-indicator" id="copilot-status-indicator"></span>
-      <i class="fa-solid fa-robot"></i> Duo Assistant
-    </div>
-    <div class="copilot-chat-header-actions">
-      <button class="copilot-chat-header-btn" id="copilot-settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
-      <button class="copilot-chat-header-btn" id="copilot-clear-btn" title="Clear chat history"><i class="fa-solid fa-trash-can"></i></button>
-      <button class="copilot-chat-header-btn" id="copilot-close-btn" title="Minimize"><i class="fa-solid fa-minus"></i></button>
-    </div>
-  </div>
-
-  <!-- LLM Provider Select -->
-  <div class="copilot-chat-provider-select" id="copilot-chat-provider-select" style="padding: 8px 12px; background-color: var(--bg-soft); border-bottom: 2px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;">
-    <span style="font-size: 11px; color: var(--fg-secondary); font-weight: bold;">LLM Provider:</span>
-    <select id="copilot-provider-select" class="form-control" style="font-size: 11px; padding: 2px 6px; height: auto; max-width: 170px; margin: 0; line-height: 1;">
-      <option value="ollama">Ollama (Local LLM)</option>
-      <option value="gemini">Gemini</option>
-      <option value="claude">Claude</option>
-      <option value="github-copilot" selected>GitHub Copilot</option>
-      <option value="gitlab-duo">GitLab Duo</option>
-      <option value="aws-q">AWS Q (Cloud)</option>
-    
-    </select>
-  </div>
-
-  <!-- Copilot Settings Panel -->
-  <div class="copilot-chat-settings" id="copilot-chat-settings" style="display: none; padding: 12px; background-color: var(--bg-soft); border-bottom: 2px solid var(--border-color); font-size: 12px; flex-shrink: 0; box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.15);">
-    <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; color: var(--orange);">Local Ollama Settings</div>
-    <div class="form-group mb-2" style="display: flex; gap: 8px;">
-      <div style="flex: 1;">
-        <label class="form-label" style="font-size: 11px; margin-bottom: 4px; display: block; color: var(--fg-primary);">Ollama URL</label>
-        <input type="text" id="copilot-ollama-url" class="form-control" style="padding: 6px; font-size: 11px;" placeholder="http://localhost:11434">
-      </div>
-      <div style="flex: 1;">
-        <label class="form-label" style="font-size: 11px; margin-bottom: 4px; display: block; color: var(--fg-primary);">Ollama Model</label>
-        <input type="text" id="copilot-ollama-model" class="form-control" style="padding: 6px; font-size: 11px;" placeholder="qwen3:14b or gemma4:12b">
-      </div>
-    </div>
-    
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-      <span id="copilot-settings-status" style="font-size: 10px; color: var(--green); font-weight: bold;"></span>
-      <button class="btn btn-sm btn-primary" id="copilot-save-settings-btn" style="padding: 4px 10px; font-size: 11px; background-color: var(--blue); color: var(--bg-medium); border: 1px solid var(--border-color); cursor: pointer;">Save Settings</button>
-    </div>
-  </div>
-
-  
-      <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px 12px; background: var(--bg-soft); border-bottom: 1px solid var(--border-color);">
-          <label for="enable-voice-feedback" style="font-size: 11px; cursor: pointer;">Spoken Feedback</label>
-          <input type="checkbox" id="enable-voice-feedback" style="cursor: pointer;">
-      </div>
-    
-<div class="copilot-chat-body" id="copilot-chat-body">
-    <div class="copilot-chat-msg copilot-chat-msg-bot">
-      <p>Hello! I am your GitLab Duo Assistant.</p>
-      <p>I have live access to your dashboard. Ask me about your projects, open merge requests, issues, or failing pipelines!</p>
-    </div>
-  </div>
-  <div class="copilot-chat-input-area">
-    <div style="position: relative; flex-grow: 1; display: flex;">
-      <input type="text" class="copilot-chat-input" id="copilot-chat-input" style="width: 100%; padding-right: 40px; outline: none;" placeholder="Query Duo for tasks, jobs, status...">
-      <button id="copilot-mic-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10; outline: none;">
-          <i class="fa-solid fa-microphone"></i>
-      </button>
-    </div>
-    <button class="copilot-chat-send-btn" id="copilot-send-btn" title="Send message"><i class="fa-solid fa-paper-plane"></i></button>
-  </div>
-</div>
+<!-- Unified Assistant is dynamically injected by shared-assistant.js -->
 
 
   <!-- Application Script -->
   <script src="./assets/js/app.js?v=1781617661116"></script>
 
-    <script>
-      window.addEventListener('load', () => {
-        const micBtn = document.getElementById('copilot-mic-btn');
-        const voiceFeedbackCheck = document.getElementById('enable-voice-feedback');
-        const chatInput = document.getElementById('copilot-chat-input');
-        const sendBtn = document.getElementById('copilot-send-btn');
-        
-        if(micBtn && chatInput && sendBtn) {
-            let recognition = null;
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                
-                recognition.onstart = function() { micBtn.style.color = '#ef4444'; };
-                recognition.onresult = function(event) {
-                    chatInput.value = event.results[0][0].transcript;
-                    sendBtn.click();
-                };
-                recognition.onerror = function() { micBtn.style.color = '#94a3b8'; };
-                recognition.onend = function() { micBtn.style.color = '#94a3b8'; };
-            }
-            
-            micBtn.addEventListener('click', () => {
-                if (recognition) recognition.start();
-                else alert('Speech recognition not supported in this browser.');
-            });
-        }
-        
-        // Intercept DOM node insertions in the chat body to read bot messages aloud
-        const chatBody = document.getElementById('copilot-chat-body');
-        if (chatBody && voiceFeedbackCheck) {
-            const observer = new MutationObserver((mutations) => {
-                if (!voiceFeedbackCheck.checked) return;
-                mutations.forEach(mutation => {
-                    mutation.addedNodes.forEach(node => {
-                        if (node.nodeType === 1 && node.classList.contains('msg-bot')) {
-                            // Don't read the typing indicator
-                            if (node.innerText === 'Thinking...' || node.classList.contains('italic')) return;
-                            if ('speechSynthesis' in window) {
-                                window.speechSynthesis.cancel();
-                                const utterance = new SpeechSynthesisUtterance(node.innerText);
-                                window.speechSynthesis.speak(utterance);
-                            }
-                        }
-                    });
-                });
-            });
-            observer.observe(chatBody, { childList: true });
-        }
-      });
-    </script>
-    
+    <script src="/assets/js/shared-assistant.js"></script>
 </body>
 </html>
