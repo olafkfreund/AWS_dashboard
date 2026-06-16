@@ -2187,6 +2187,61 @@ ${runsSummary.slice(0, 10).join('\n') || 'None'}
 Use this information to answer user questions about tasks, merge requests, issues, pipelines, and general project status. Keep your responses helpful, concise, and formatted in Markdown.`;
   }
 
+  async function getBestOllamaModel(providerVal, url) {
+    try {
+      const res = await fetch(`${url}/api/tags`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const models = data.models || [];
+      if (models.length === 0) return null;
+      
+      // Filter out embedding models
+      const activeModels = models.filter(m => {
+        const capabilities = m.capabilities || [];
+        const details = m.details || {};
+        const name = m.name.toLowerCase();
+        return !name.includes('embedding') && (capabilities.includes('completion') || !details.family || details.family !== 'bert');
+      });
+      
+      if (activeModels.length === 0) return models[0].name;
+
+      // If the user has a configured custom model in localStorage, try that first for "ollama"
+      if (providerVal === 'ollama') {
+        const customModel = localStorage.getItem('copilot_ollama_model');
+        if (customModel && activeModels.some(m => m.name === customModel)) {
+          return customModel;
+        }
+      }
+
+      // Try to match by brand
+      let brandKeywords = [];
+      if (providerVal === 'gemini') {
+        brandKeywords = ['gemma', 'gemini'];
+      } else if (providerVal === 'claude') {
+        brandKeywords = ['llama', 'claude'];
+      }
+
+      // 1st pass: search for brand keyword match
+      for (const kw of brandKeywords) {
+        const match = activeModels.find(m => m.name.toLowerCase().includes(kw));
+        if (match) return match.name;
+      }
+
+      // 2nd pass: search for qwen or llama if brand match didn't find anything
+      const fallbackKeywords = ['qwen', 'llama', 'gemma', 'mistral', 'phi'];
+      for (const kw of fallbackKeywords) {
+        const match = activeModels.find(m => m.name.toLowerCase().includes(kw));
+        if (match) return match.name;
+      }
+
+      // 3rd pass: default to first active model
+      return activeModels[0].name;
+    } catch (err) {
+      console.warn("Failed to query Ollama tags endpoint:", err);
+      return null;
+    }
+  }
+
   async function sendCopilotMessage() {
     if (!el.copilotChatInput) return;
     const promptText = el.copilotChatInput.value.trim();
@@ -2259,7 +2314,7 @@ Use this information to answer user questions about tasks, merge requests, issue
           throw new Error('No GitHub token found. Please set a Personal Access Token in Settings.');
         }
 
-        // 1. Get Copilot token
+        // 1. Get Copilot short-lived token
         let copilotToken;
         try {
           const tokenRes = await fetch('https://api.github.com/copilot_internal/v2/token', {
@@ -2277,7 +2332,7 @@ Use this information to answer user questions about tasks, merge requests, issue
           throw new Error('Failed to retrieve GitHub Copilot token. Make sure your account/organization has an active Copilot subscription. Details: ' + tokenErr.message);
         }
 
-        // 2. Call Copilot completions
+        // 2. Call Copilot Chat endpoint
         const completionsRes = await fetch('https://api.githubcopilot.com/chat/completions', {
           method: 'POST',
           headers: {
@@ -2330,7 +2385,8 @@ Use this information to answer user questions about tasks, merge requests, issue
       try {
         updateCopilotStatus('loading', 'Ollama thinking...');
         const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
-        const model = localStorage.getItem('copilot_ollama_model') || 'qwen3:14b';
+        const configuredModel = localStorage.getItem('copilot_ollama_model') || 'qwen3:14b';
+        const model = await getBestOllamaModel('ollama', url) || configuredModel;
         const systemMessage = getCopilotSystemMessage();
         
         const res = await fetch(`${url}/api/generate`, {
@@ -2415,7 +2471,7 @@ Use this information to answer user questions about tasks, merge requests, issue
         // 2. Fall back to local Ollama client
         if (!handled) {
           const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
-          const model = provider === 'gemini' ? 'gemma2' : 'llama3';
+          const model = await getBestOllamaModel(provider, url) || (provider === 'gemini' ? 'gemma2' : 'llama3');
           
           const res = await fetch(`${url}/api/generate`, {
             method: 'POST',

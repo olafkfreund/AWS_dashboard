@@ -1336,6 +1336,53 @@ ${loginSummary || 'None'}
 Please answer Olaf's questions about these resources and login events, or general DevOps questions, keeping in mind your role as ${providerName}. Keep your responses helpful, concise, and formatted in Markdown.`;
         }
 
+        async function getBestOllamaModel(providerVal, url) {
+            try {
+                const res = await fetch(`${url}/api/tags`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                const models = data.models || [];
+                if (models.length === 0) return null;
+                
+                // Filter out embedding models
+                const activeModels = models.filter(m => {
+                    const capabilities = m.capabilities || [];
+                    const details = m.details || {};
+                    const name = m.name.toLowerCase();
+                    return !name.includes('embedding') && (capabilities.includes('completion') || !details.family || details.family !== 'bert');
+                });
+                
+                if (activeModels.length === 0) return models[0].name;
+
+                // Try to match by brand
+                let brandKeywords = [];
+                if (providerVal === 'gemini') {
+                    brandKeywords = ['gemma', 'gemini'];
+                } else if (providerVal === 'claude') {
+                    brandKeywords = ['llama', 'claude'];
+                }
+
+                // 1st pass: search for brand keyword match
+                for (const kw of brandKeywords) {
+                    const match = activeModels.find(m => m.name.toLowerCase().includes(kw));
+                    if (match) return match.name;
+                }
+
+                // 2nd pass: search for qwen or llama if brand match didn't find anything
+                const fallbackKeywords = ['qwen', 'llama', 'gemma', 'mistral', 'phi'];
+                for (const kw of fallbackKeywords) {
+                    const match = activeModels.find(m => m.name.toLowerCase().includes(kw));
+                    if (match) return match.name;
+                }
+
+                // 3rd pass: default to first active model
+                return activeModels[0].name;
+            } catch (err) {
+                console.warn("Failed to query Ollama tags endpoint:", err);
+                return null;
+            }
+        }
+
         async function handleSend() {
             const text = chatInput.value.trim();
             if (!text) return;
@@ -1357,7 +1404,7 @@ Please answer Olaf's questions about these resources and login events, or genera
                 let answer = '';
                 if (providerVal === 'ollama') {
                     const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
-                    const model = 'llama3';
+                    const model = await getBestOllamaModel('ollama', url) || 'llama3';
                     const systemMessage = getAssistantSystemMessage(providerText);
                     
                     const res = await fetch(`${url}/api/generate`, {
@@ -1421,7 +1468,7 @@ Please answer Olaf's questions about these resources and login events, or genera
                     // 2. Fall back to local Ollama client
                     if (!handled) {
                         const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
-                        const model = providerVal === 'gemini' ? 'gemma2' : 'llama3';
+                        const model = await getBestOllamaModel(providerVal, url) || (providerVal === 'gemini' ? 'gemma2' : 'llama3');
                         try {
                             const res = await fetch(`${url}/api/generate`, {
                                 method: 'POST',
