@@ -430,170 +430,29 @@
         <div id="view-k8s" style="display: none;">
             <header class="mb-10 flex justify-between items-center">
                 <div>
-                    <h1 class="text-4xl font-bold tracking-tight">Kubernetes Review</h1>
-                    <p class="text-muted-foreground mt-2 font-medium">Active telemetry for local review cluster <code class="bg-secondary px-1.5 py-0.5 rounded text-xs text-primary border border-border" id="k8s-active-context">k3d-review-cluster</code></p>
+                    <h1 class="text-4xl font-bold tracking-tight">AWS Kubernetes (EKS)</h1>
+                    <p class="text-muted-foreground mt-2 font-medium">Amazon Elastic Kubernetes Service clusters in your AWS account</p>
                 </div>
                 <button onclick="refreshK8sData()" class="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium text-sm py-2 px-4 rounded-md border border-border shadow-sm transition-colors flex items-center gap-2">
-                    <i class="fa-solid fa-arrows-rotate" id="k8s-refresh-icon"></i> Refresh Cluster
+                    <i class="fa-solid fa-arrows-rotate" id="k8s-refresh-icon"></i> Refresh
                 </button>
             </header>
-
-            <!-- Deployed Web App Card -->
-            <div class="glass-panel p-6 mb-8 border border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
-                <!-- Glowing accent background -->
-                <div class="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-transparent pointer-events-none"></div>
-                
-                <div class="relative z-10">
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-primary/20 text-primary border-primary/40">WEB APPLICATION</span>
-                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                        <span class="text-xs text-green-500 font-semibold" id="k8s-app-status">Active</span>
-                    </div>
-                    <h2 class="text-xl font-bold text-white">NGINX Hello App</h2>
-                    <p class="text-sm text-muted-foreground mt-1 max-w-xl">
-                        A lightweight web application running inside the <code>review-app</code> namespace, exposed via Traefik Ingress on your host's port 8095.
-                    </p>
-                </div>
-                
-                <div class="relative z-10 flex gap-4 w-full md:w-auto">
-                    <a href="http://localhost:8095" target="_blank" class="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5 px-6 rounded-md shadow-sm transition-all flex items-center justify-center gap-2 text-sm">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open App
-                    </a>
-                </div>
-            </div>
 
             <!-- Loader -->
             <div id="k8s-loader" class="text-center py-12 hidden">
                 <div class="loader mx-auto"></div>
-                <p class="text-muted-foreground mt-4 text-sm font-medium">Querying Kubernetes cluster telemetry...</p>
+                <p class="text-muted-foreground mt-4 text-sm font-medium">Fetching EKS clusters from AWS...</p>
             </div>
 
+            <!-- Error state -->
             <div id="k8s-error-state" class="glass-panel p-12 text-center text-muted-foreground max-w-xl mx-auto hidden">
                 <i class="fa-solid fa-triangle-exclamation text-4xl mb-4 text-destructive"></i>
-                <h3 class="text-lg font-semibold text-foreground mb-2">Cluster Telemetry Failed</h3>
-                <p class="text-sm text-muted-foreground mb-6 font-medium" id="k8s-error-msg">
-                    Unable to fetch cluster resources. Please verify that your local k3d server is running.
-                </p>
+                <h3 class="text-lg font-semibold text-foreground mb-2">EKS Query Failed</h3>
+                <p class="text-sm text-muted-foreground mb-6 font-medium" id="k8s-error-msg">Unable to fetch EKS clusters. Please log in via AWS SSO.</p>
             </div>
 
-            <!-- Cluster Telemetry Content -->
-            <div id="k8s-content" class="space-y-8">
-                <!-- Summary Stats -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="glass-panel p-5">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Nodes</span>
-                                <span class="text-3xl font-bold text-white mt-1 block" id="k8s-nodes-count">0</span>
-                            </div>
-                            <div class="bg-blue-500/10 p-3 rounded-lg text-blue-400">
-                                <i class="fa-solid fa-server text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="glass-panel p-5">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Deployments</span>
-                                <span class="text-3xl font-bold text-white mt-1 block" id="k8s-deps-count">0</span>
-                            </div>
-                            <div class="bg-purple-500/10 p-3 rounded-lg text-purple-400">
-                                <i class="fa-solid fa-cubes text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="glass-panel p-5">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Running Pods</span>
-                                <span class="text-3xl font-bold text-white mt-1 block" id="k8s-pods-count">0</span>
-                            </div>
-                            <div class="bg-emerald-500/10 p-3 rounded-lg text-emerald-400">
-                                <i class="fa-solid fa-cube text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Nodes List -->
-                <div class="glass-panel p-6">
-                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-server text-primary"></i> Cluster Nodes
-                    </h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-xs text-muted-foreground border-b border-border">
-                                <tr>
-                                    <th class="pb-3 font-semibold">Name</th>
-                                    <th class="pb-3 font-semibold">Status</th>
-                                    <th class="pb-3 font-semibold">Roles</th>
-                                    <th class="pb-3 font-semibold">Version</th>
-                                    <th class="pb-3 font-semibold">OS / Arch</th>
-                                    <th class="pb-3 font-semibold">Age</th>
-                                </tr>
-                            </thead>
-                            <tbody id="k8s-nodes-list" class="divide-y divide-border">
-                                <tr>
-                                    <td colspan="6" class="py-4 text-center text-muted-foreground italic">No nodes detected.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Deployments List -->
-                <div class="glass-panel p-6">
-                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-cubes text-primary"></i> Deployments
-                    </h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-xs text-muted-foreground border-b border-border">
-                                <tr>
-                                    <th class="pb-3 font-semibold">Namespace</th>
-                                    <th class="pb-3 font-semibold">Name</th>
-                                    <th class="pb-3 font-semibold">Ready / Replicas</th>
-                                    <th class="pb-3 font-semibold">Up-to-date</th>
-                                    <th class="pb-3 font-semibold">Available</th>
-                                    <th class="pb-3 font-semibold">Age</th>
-                                </tr>
-                            </thead>
-                            <tbody id="k8s-deps-list" class="divide-y divide-border">
-                                <tr>
-                                    <td colspan="6" class="py-4 text-center text-muted-foreground italic">No deployments detected.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Pods List -->
-                <div class="glass-panel p-6">
-                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-cube text-primary"></i> Pods
-                    </h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-xs text-muted-foreground border-b border-border">
-                                <tr>
-                                    <th class="pb-3 font-semibold">Namespace</th>
-                                    <th class="pb-3 font-semibold">Name</th>
-                                    <th class="pb-3 font-semibold">Status</th>
-                                    <th class="pb-3 font-semibold">IP</th>
-                                    <th class="pb-3 font-semibold">Node</th>
-                                    <th class="pb-3 font-semibold">Restarts</th>
-                                    <th class="pb-3 font-semibold">Age</th>
-                                </tr>
-                            </thead>
-                            <tbody id="k8s-pods-list" class="divide-y divide-border">
-                                <tr>
-                                    <td colspan="7" class="py-4 text-center text-muted-foreground italic">No pods detected.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            <!-- EKS Content -->
+            <div id="k8s-content" class="space-y-6"></div>
         </div>
     </div>
 
@@ -948,14 +807,6 @@
                             serviceBadgeColor = 'bg-rose-950/40 text-rose-400 border-rose-700/40';
                         } else if (inst.service === 'EKS') {
                             serviceBadgeColor = 'bg-cyan-900/40 text-cyan-300 border-cyan-700/40';
-                        } else if (inst.service === 'K8s Node') {
-                            serviceBadgeColor = 'bg-indigo-900/40 text-indigo-300 border-indigo-700/40';
-                        } else if (inst.service === 'K8s Deployment') {
-                            serviceBadgeColor = 'bg-violet-900/40 text-violet-300 border-violet-700/40';
-                        } else if (inst.service === 'K8s Service') {
-                            serviceBadgeColor = 'bg-teal-900/40 text-teal-300 border-teal-700/40';
-                        } else if (inst.service === 'K8s Pod') {
-                            serviceBadgeColor = 'bg-sky-900/40 text-sky-300 border-sky-700/40';
                         }
 
                         const state = inst.state || 'running';
@@ -976,21 +827,13 @@
                             ? `${state.toUpperCase()} • ${inst.publicIp}`
                             : inst.publicIp;
 
-                        // For EKS/K8s, show a link to the Kubernetes tab
-                        const isK8s = inst.service && inst.service.startsWith('K8s');
+                        // For EKS, show a link to the Kubernetes tab
                         const isEKS = inst.service === 'EKS';
-
-                        const eksExtra = (isEKS || isK8s) ? `
-                            <button onclick="showView('k8s')" class="mt-2 text-[10px] ${isEKS ? 'text-cyan-400 hover:text-cyan-300' : 'text-indigo-400 hover:text-indigo-300'} underline underline-offset-2 font-semibold">View in Kubernetes tab →</button>
+                        const eksExtra = isEKS ? `
+                            <button onclick="showView('k8s')" class="mt-2 text-[10px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-semibold">View in Kubernetes tab →</button>
                         ` : '';
-
                         const typeLabel = isEKS ? 'EKS Cluster' : inst.type;
-                        const cardBorder = isEKS
-                            ? 'border-cyan-800/50'
-                            : isK8s
-                            ? 'border-indigo-800/40'
-                            : 'border-slate-700';
-
+                        const cardBorder = isEKS ? 'border-cyan-800/50' : 'border-slate-700';
 
                         return `
                             <div class="bg-slate-800/50 p-4 rounded-lg border ${cardBorder} card-hover">
@@ -1497,188 +1340,125 @@
         async function refreshK8sData() {
             const refreshIcon = document.getElementById('k8s-refresh-icon');
             if (refreshIcon) refreshIcon.classList.add('animate-spin');
-            
-            const loader = document.getElementById('k8s-loader');
+
+            const loader    = document.getElementById('k8s-loader');
             const errorState = document.getElementById('k8s-error-state');
-            const content = document.getElementById('k8s-content');
-            
+            const content   = document.getElementById('k8s-content');
+
             loader.classList.remove('hidden');
             errorState.classList.add('hidden');
-            content.classList.add('hidden');
-            
+            content.innerHTML = '';
+
             try {
-                const res = await fetch('/api/k8s/status');
-                
+                const res = await fetch('/api/eks/status');
                 const contentType = res.headers.get('content-type') || '';
-                if (res.status === 401 || (res.redirected || !contentType.includes('application/json'))) {
+
+                if (res.status === 401 || !contentType.includes('application/json')) {
                     if (refreshIcon) refreshIcon.classList.remove('animate-spin');
                     loader.classList.add('hidden');
-                    if (errorState) {
-                        document.getElementById('k8s-error-msg').innerText = 'Not authenticated. Use the AWS SSO Login button.';
-                        errorState.classList.remove('hidden');
-                    }
-                    return;
-                }
-                
-                const data = await res.json();
-                
-                if (data && data.success === false && (data.error || '').includes('Unauthorized')) {
-                    if (refreshIcon) refreshIcon.classList.remove('animate-spin');
-                    loader.classList.add('hidden');
-                    if (errorState) {
-                        document.getElementById('k8s-error-msg').innerText = 'Not authenticated. Use the AWS SSO Login button.';
-                        errorState.classList.remove('hidden');
-                    }
-                    return;
-                }
-                
-                if (refreshIcon) refreshIcon.classList.remove('animate-spin');
-                loader.classList.add('hidden');
-                
-                if (data.success) {
-                    content.classList.remove('hidden');
-                    
-
-
-                    
-                    // Render Nodes
-                    const nodes = data.nodes || [];
-                    document.getElementById('k8s-nodes-count').innerText = nodes.length;
-                    const nodesList = document.getElementById('k8s-nodes-list');
-                    if (nodes.length > 0) {
-                        nodesList.innerHTML = nodes.map(n => {
-                            const statusObj = n.status || {};
-                            const conds = statusObj.conditions || [];
-                            const readyCond = conds.find(c => c.type === 'Ready') || {};
-                            const isReady = readyCond.status === 'True';
-                            const statusBadge = isReady 
-                                ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 flex items-center gap-1 w-fit"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Ready</span>'
-                                : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/30 flex items-center gap-1 w-fit"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>NotReady</span>';
-                            
-                            const labels = n.metadata.labels || {};
-                            const roles = Object.keys(labels)
-                                .filter(k => k.startsWith('node-role.kubernetes.io/'))
-                                .map(k => k.split('/').pop())
-                                .join(', ') || 'worker';
-                                
-                            const info = statusObj.nodeInfo || {};
-                            return `
-                                <tr class="hover:bg-slate-800/20 transition-colors">
-                                    <td class="py-4 font-semibold text-white font-mono">${n.metadata.name}</td>
-                                    <td class="py-4">${statusBadge}</td>
-                                    <td class="py-4 text-slate-300 font-medium">${roles}</td>
-                                    <td class="py-4 font-mono text-xs text-slate-400">${info.kubeletVersion || 'N/A'}</td>
-                                    <td class="py-4 text-xs text-slate-400">${info.osImage || 'N/A'} (${info.architecture || 'N/A'})</td>
-                                    <td class="py-4 text-slate-400">${formatAge(n.metadata.creationTimestamp)}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        nodesList.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-muted-foreground italic">No nodes detected.</td></tr>';
-                    }
-                    
-                    // Render Deployments
-                    const deps = data.deployments || [];
-                    document.getElementById('k8s-deps-count').innerText = deps.length;
-                    const depsList = document.getElementById('k8s-deps-list');
-                    if (deps.length > 0) {
-                        depsList.innerHTML = deps.map(d => {
-                            const statusObj = d.status || {};
-                            const ready = statusObj.readyReplicas || 0;
-                            const replicas = statusObj.replicas || 0;
-                            const upToDate = statusObj.updatedReplicas || 0;
-                            const available = statusObj.availableReplicas || 0;
-                            return `
-                                <tr class="hover:bg-slate-800/20 transition-colors">
-                                    <td class="py-4 text-slate-400 font-mono text-xs">${d.metadata.namespace}</td>
-                                    <td class="py-4 font-semibold text-white">${d.metadata.name}</td>
-                                    <td class="py-4 font-semibold ${ready === replicas ? 'text-green-400' : 'text-amber-400'}">${ready} / ${replicas}</td>
-                                    <td class="py-4 text-slate-300">${upToDate}</td>
-                                    <td class="py-4 text-slate-300">${available}</td>
-                                    <td class="py-4 text-slate-400">${formatAge(d.metadata.creationTimestamp)}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        depsList.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-muted-foreground italic">No deployments detected.</td></tr>';
-                    }
-                    
-                    // Render Pods
-                    const pods = data.pods || [];
-                    document.getElementById('k8s-pods-count').innerText = pods.filter(p => (p.status || {}).phase === 'Running').length;
-                    const podsList = document.getElementById('k8s-pods-list');
-                    if (pods.length > 0) {
-                        podsList.innerHTML = pods.map(p => {
-                            const statusObj = p.status || {};
-                            const phase = statusObj.phase || 'Unknown';
-                            
-                            let statusClass = 'bg-slate-500/10 text-slate-400 border-slate-500/30';
-                            let dotClass = 'bg-slate-400';
-                            if (phase === 'Running') {
-                                statusClass = 'bg-green-500/10 text-green-400 border-green-500/30';
-                                dotClass = 'bg-green-500';
-                            } else if (phase === 'Pending') {
-                                statusClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-                                dotClass = 'bg-amber-500';
-                            } else if (phase === 'Failed') {
-                                statusClass = 'bg-red-500/10 text-red-400 border-red-500/30';
-                                dotClass = 'bg-red-500';
-                            }
-                            
-                            const statusBadge = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold ${statusClass} border flex items-center gap-1 w-fit"><span class="w-1.5 h-1.5 rounded-full ${dotClass}"></span>${phase}</span>`;
-                            
-                            const containerStatuses = statusObj.containerStatuses || [];
-                            const restarts = containerStatuses.reduce((acc, c) => acc + (c.restartCount || 0), 0);
-                            
-                            return `
-                                <tr class="hover:bg-slate-800/20 transition-colors">
-                                    <td class="py-4 text-slate-400 font-mono text-xs">${p.metadata.namespace}</td>
-                                    <td class="py-4 font-semibold text-white font-mono text-xs">${p.metadata.name}</td>
-                                    <td class="py-4">${statusBadge}</td>
-                                    <td class="py-4 font-mono text-xs text-slate-300">${statusObj.podIP || 'None'}</td>
-                                    <td class="py-4 text-slate-300 text-xs">${p.spec.nodeName || 'None'}</td>
-                                    <td class="py-4 font-semibold ${restarts > 0 ? 'text-red-400' : 'text-slate-300'}">${restarts}</td>
-                                    <td class="py-4 text-slate-400">${formatAge(p.metadata.creationTimestamp)}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        podsList.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-muted-foreground italic">No pods detected.</td></tr>';
-                    }
-                    
-                    const helloAppPod = pods.find(p => p.metadata && p.metadata.name && p.metadata.name.startsWith('hello-deployment') && p.metadata.namespace === 'review-app');
-                    const helloAppStatus = document.getElementById('k8s-app-status');
-                    if (helloAppPod) {
-                        const phase = helloAppPod.status.phase;
-                        if (helloAppStatus) {
-                            helloAppStatus.innerText = phase;
-                            if (phase === 'Running') {
-                                helloAppStatus.className = 'text-xs text-green-500 font-semibold';
-                                helloAppStatus.previousElementSibling.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
-                            } else {
-                                helloAppStatus.className = 'text-xs text-amber-500 font-semibold';
-                                helloAppStatus.previousElementSibling.className = 'w-2 h-2 rounded-full bg-amber-500';
-                            }
-                        }
-                    } else {
-                        if (helloAppStatus) {
-                            helloAppStatus.innerText = 'Not Found';
-                            helloAppStatus.className = 'text-xs text-red-500 font-semibold';
-                            helloAppStatus.previousElementSibling.className = 'w-2 h-2 rounded-full bg-red-500';
-                        }
-                    }
-                } else {
-                    document.getElementById('k8s-error-msg').innerText = data.error || 'Failed to fetch cluster telemetry.';
+                    document.getElementById('k8s-error-msg').innerText = 'Not authenticated. Use the AWS SSO Login button.';
                     errorState.classList.remove('hidden');
+                    return;
                 }
-            } catch (err) {
-                console.error("Kubernetes fetch error:", err);
+
+                const data = await res.json();
                 if (refreshIcon) refreshIcon.classList.remove('animate-spin');
                 loader.classList.add('hidden');
-                document.getElementById('k8s-error-msg').innerText = 'Network/server error: ' + err.message;
+
+                if (!data.success) {
+                    document.getElementById('k8s-error-msg').innerText = data.error || 'Failed to fetch EKS data.';
+                    errorState.classList.remove('hidden');
+                    return;
+                }
+
+                const clusters = data.clusters || [];
+
+                if (clusters.length === 0) {
+                    content.innerHTML = `
+                        <div class="glass-panel p-16 text-center text-muted-foreground max-w-xl mx-auto">
+                            <i class="fa-brands fa-aws text-5xl mb-4 text-slate-500"></i>
+                            <h3 class="text-lg font-semibold text-foreground mb-2">No EKS Clusters Found</h3>
+                            <p class="text-sm">No Amazon EKS clusters exist in your AWS account for the configured region (<strong>${data.region || 'eu-west-2'}</strong>).</p>
+                            <p class="text-xs mt-3 text-slate-500">Once you create an EKS cluster in AWS it will automatically appear here.</p>
+                        </div>`;
+                    return;
+                }
+
+                content.innerHTML = clusters.map(cluster => {
+                    const statusColor = cluster.status === 'ACTIVE'
+                        ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                        : cluster.status === 'CREATING' || cluster.status === 'UPDATING'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-red-500/10 text-red-400 border-red-500/30';
+                    const dotColor = cluster.status === 'ACTIVE' ? 'bg-green-500 animate-pulse' :
+                                     cluster.status === 'CREATING' ? 'bg-amber-500' : 'bg-red-500';
+
+                    const nodeGroupRows = (cluster.nodeGroups || []).map(ng => {
+                        const ngStatusColor = ng.status === 'ACTIVE'
+                            ? 'text-green-400' : ng.status === 'CREATING' ? 'text-amber-400' : 'text-red-400';
+                        return `
+                            <tr class="hover:bg-slate-800/20 transition-colors">
+                                <td class="py-3 font-mono text-xs text-white">${ng.name}</td>
+                                <td class="py-3 font-mono text-xs text-slate-300">${ng.instanceType}</td>
+                                <td class="py-3 text-slate-300">${ng.desired} <span class="text-slate-500 text-xs">(${ng.min}–${ng.max})</span></td>
+                                <td class="py-3 text-xs text-slate-400">${ng.amiType}</td>
+                                <td class="py-3 text-xs ${ngStatusColor} font-semibold">${ng.status}</td>
+                                <td class="py-3 text-slate-400 text-xs">${ng.createdAt ? formatAge(ng.createdAt) : 'N/A'}</td>
+                            </tr>`;
+                    }).join('') || `<tr><td colspan="6" class="py-4 text-center text-muted-foreground italic text-sm">No node groups configured.</td></tr>`;
+
+                    return `
+                        <div class="glass-panel p-6 border border-cyan-800/30 card-hover">
+                            <div class="flex flex-col md:flex-row justify-between items-start gap-4 mb-6">
+                                <div>
+                                    <div class="flex items-center gap-3 mb-1">
+                                        <span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-cyan-900/40 text-cyan-300 border-cyan-700/40">EKS</span>
+                                        <span class="text-[10px] font-mono bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded">${cluster.region}</span>
+                                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${statusColor} border flex items-center gap-1.5">
+                                            <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>${cluster.status}
+                                        </span>
+                                    </div>
+                                    <h2 class="text-2xl font-bold text-white">${cluster.name}</h2>
+                                    <p class="text-sm text-muted-foreground mt-1">Kubernetes <strong class="text-slate-300">v${cluster.version}</strong> &nbsp;•&nbsp; Created ${formatAge(cluster.createdAt)} ago</p>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">API Endpoint</div>
+                                    <code class="text-xs text-cyan-300 font-mono break-all">${cluster.endpoint ? cluster.endpoint.replace('https://', '') : 'Private'}</code>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                                    <i class="fa-solid fa-server text-cyan-400 text-xs"></i> Node Groups
+                                </h3>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm text-left">
+                                        <thead class="text-xs text-muted-foreground border-b border-border">
+                                            <tr>
+                                                <th class="pb-2 font-semibold">Name</th>
+                                                <th class="pb-2 font-semibold">Instance Type</th>
+                                                <th class="pb-2 font-semibold">Nodes (min–max)</th>
+                                                <th class="pb-2 font-semibold">AMI Type</th>
+                                                <th class="pb-2 font-semibold">Status</th>
+                                                <th class="pb-2 font-semibold">Age</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border">${nodeGroupRows}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+
+            } catch (err) {
+                console.error('EKS fetch error:', err);
+                if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                loader.classList.add('hidden');
+                document.getElementById('k8s-error-msg').innerText = 'Network error: ' + err.message;
                 errorState.classList.remove('hidden');
             }
         }
+
 
         let refreshTimerId = null;
 

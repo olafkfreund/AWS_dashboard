@@ -659,37 +659,63 @@ app.post('/api/config/tokens', (req, res) => {
     }
 });
 
-// Kubernetes Status Endpoint
-app.get('/api/k8s/status', (req, res) => {
-    const context = req.query.context || 'k3d-review-cluster';
-    
-    if (!/^[a-zA-Z0-9\-_:]+$/.test(context)) {
-        return res.status(400).json({ success: false, error: 'Invalid context name' });
+// AWS EKS Status Endpoint - lists all EKS clusters and their node groups
+app.get('/api/eks/status', async (req, res) => {
+    try {
+        const { eks } = getAwsClients(req);
+        const listRes = await eks.send(new ListClustersCommand({}));
+        const clusterNames = listRes.clusters || [];
+
+        if (clusterNames.length === 0) {
+            return res.json({ success: true, clusters: [], message: 'No EKS clusters found in this region.' });
+        }
+
+        const clusters = await Promise.all(clusterNames.map(async (name) => {
+            try {
+                const [descRes, ngListRes] = await Promise.all([
+                    eks.send(new DescribeClusterCommand({ name })),
+                    eks.send(new ListNodegroupsCommand({ clusterName: name })).catch(() => ({ nodegroups: [] }))
+                ]);
+                const cluster = descRes.cluster;
+                const ngNames = ngListRes.nodegroups || [];
+
+                const nodeGroups = await Promise.all(ngNames.map(ng =>
+                    eks.send(new DescribeNodegroupCommand({ clusterName: name, nodegroupName: ng }))
+                        .then(r => ({
+                            name: r.nodegroup.nodegroupName,
+                            status: r.nodegroup.status,
+                            instanceType: r.nodegroup.instanceTypes?.[0] || 'unknown',
+                            desired: r.nodegroup.scalingConfig?.desiredSize ?? 0,
+                            min: r.nodegroup.scalingConfig?.minSize ?? 0,
+                            max: r.nodegroup.scalingConfig?.maxSize ?? 0,
+                            amiType: r.nodegroup.amiType || 'AL2_x86_64',
+                            createdAt: r.nodegroup.createdAt
+                        }))
+                        .catch(() => null)
+                ));
+
+                return {
+                    name: cluster.name,
+                    status: cluster.status,
+                    version: cluster.version,
+                    endpoint: cluster.endpoint || null,
+                    region: cluster.arn?.split(':')[3] || process.env.AWS_REGION || 'eu-west-2',
+                    roleArn: cluster.roleArn,
+                    createdAt: cluster.createdAt,
+                    tags: cluster.tags || {},
+                    nodeGroups: nodeGroups.filter(Boolean)
+                };
+            } catch (e) {
+                console.error('Error describing EKS cluster', name, e.message);
+                return null;
+            }
+        }));
+
+        res.json({ success: true, clusters: clusters.filter(Boolean) });
+    } catch (error) {
+        console.error('EKS status error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    const cmd = `kubectl --context="${context}" get nodes -o json && echo "---SPLIT---" && kubectl --context="${context}" get deployments -A -o json && echo "---SPLIT---" && kubectl --context="${context}" get pods -A -o json`;
-    
-    exec(cmd, (err, stdout, stderr) => {
-        if (err) {
-            return res.json({ success: false, error: err.message, stderr });
-        }
-        try {
-            const parts = stdout.split('---SPLIT---');
-            const nodes = JSON.parse(parts[0] || '{}');
-            const deployments = JSON.parse(parts[1] || '{}');
-            const pods = JSON.parse(parts[2] || '{}');
-            
-            res.json({
-                success: true,
-                context,
-                nodes: nodes.items || [],
-                deployments: deployments.items || [],
-                pods: pods.items || []
-            });
-        } catch (e) {
-            res.json({ success: false, error: "Failed to parse JSON output: " + e.message });
-        }
-    });
 });
 
 const ec2Client = new EC2Client(awsConfig);
@@ -956,122 +982,6 @@ app.get('/api/resources', async (req, res) => {
         } catch (eksErr) {
             console.error('Error fetching EKS clusters:', eksErr.message);
         }
-
-        // 7. Fetch local Kubernetes cluster resources (individual cards per resource)
-        await new Promise((resolve) => {
-            const k8sContext = 'k3d-review-cluster';
-            const k8sCmd = [
-                `kubectl --context="${k8sContext}" get nodes -o json`,
-                `kubectl --context="${k8sContext}" get deployments -A -o json`,
-                `kubectl --context="${k8sContext}" get services -A -o json`,
-                `kubectl --context="${k8sContext}" get pods -A -o json`
-            ].join(' && echo "---SPLIT---" && ');
-
-            const child = exec(k8sCmd, { timeout: 8000 }, (err, stdout) => {
-                if (err) {
-                    console.warn('k8s resource fetch skipped:', err.message.slice(0, 80));
-                    return resolve();
-                }
-                try {
-                    const [nodeRaw, depRaw, svcRaw, podRaw] = stdout.split('---SPLIT---');
-                    const nodes       = JSON.parse(nodeRaw  || '{}').items || [];
-                    const deployments = JSON.parse(depRaw   || '{}').items || [];
-                    const services    = JSON.parse(svcRaw   || '{}').items || [];
-                    const pods        = JSON.parse(podRaw   || '{}').items || [];
-
-                    // --- Nodes (one card each) ---
-                    nodes.forEach(node => {
-                        const name = node.metadata?.name || 'unknown-node';
-                        const ready = (node.status?.conditions || []).find(c => c.type === 'Ready')?.status === 'True';
-                        const cpu   = node.status?.capacity?.cpu || '?';
-                        const mem   = node.status?.capacity?.memory || '?';
-                        resources.push({
-                            id: name,
-                            name,
-                            type: `${cpu} CPU • ${mem} RAM`,
-                            service: 'K8s Node',
-                            state: ready ? 'running' : 'degraded',
-                            launchTime: node.metadata?.creationTimestamp || null,
-                            publicIp: 'Local Cluster (k3d)',
-                            costEstimate: '0.00',
-                            lastMonthUsage: `${cpu} vCPU`,
-                            lastMonthCost: '0.00'
-                        });
-                    });
-
-                    // --- Deployments (skip kube-system) ---
-                    deployments
-                        .filter(d => d.metadata?.namespace !== 'kube-system')
-                        .forEach(dep => {
-                            const name = dep.metadata?.name || 'unknown';
-                            const ns   = dep.metadata?.namespace || 'default';
-                            const desired = dep.spec?.replicas ?? 1;
-                            const ready   = dep.status?.readyReplicas ?? 0;
-                            resources.push({
-                                id: `${ns}/${name}`,
-                                name,
-                                type: `${ready}/${desired} replicas • ns: ${ns}`,
-                                service: 'K8s Deployment',
-                                state: ready >= desired ? 'running' : (ready > 0 ? 'degraded' : 'stopped'),
-                                launchTime: dep.metadata?.creationTimestamp || null,
-                                publicIp: 'Local Cluster (k3d)',
-                                costEstimate: '0.00',
-                                lastMonthUsage: `${desired} replicas`,
-                                lastMonthCost: '0.00'
-                            });
-                        });
-
-                    // --- Services (skip kube-system and kubernetes default svc) ---
-                    services
-                        .filter(s => s.metadata?.namespace !== 'kube-system' && s.metadata?.name !== 'kubernetes')
-                        .forEach(svc => {
-                            const name = svc.metadata?.name || 'unknown';
-                            const ns   = svc.metadata?.namespace || 'default';
-                            const type = svc.spec?.type || 'ClusterIP';
-                            const ports = (svc.spec?.ports || []).map(p => `${p.port}:${p.targetPort || p.port}`).join(', ');
-                            const ip   = svc.spec?.clusterIP || '';
-                            resources.push({
-                                id: `${ns}/${name}`,
-                                name,
-                                type: `${type} • ${ports}`,
-                                service: 'K8s Service',
-                                state: 'running',
-                                launchTime: svc.metadata?.creationTimestamp || null,
-                                publicIp: ip || 'Cluster Internal',
-                                costEstimate: '0.00',
-                                lastMonthUsage: `${type} port ${ports}`,
-                                lastMonthCost: '0.00'
-                            });
-                        });
-
-                    // --- Running Pods (non-system, non-Completed) ---
-                    pods
-                        .filter(p => p.metadata?.namespace !== 'kube-system' && p.status?.phase === 'Running')
-                        .forEach(pod => {
-                            const name    = pod.metadata?.name || 'unknown';
-                            const ns      = pod.metadata?.namespace || 'default';
-                            const node    = pod.spec?.nodeName || 'unknown';
-                            const containers = (pod.spec?.containers || []).map(c => c.image?.split('/').pop()?.split(':')[0] || c.name).join(', ');
-                            resources.push({
-                                id: `${ns}/${name}`,
-                                name,
-                                type: containers,
-                                service: 'K8s Pod',
-                                state: 'running',
-                                launchTime: pod.metadata?.creationTimestamp || null,
-                                publicIp: `Node: ${node}`,
-                                costEstimate: '0.00',
-                                lastMonthUsage: containers,
-                                lastMonthCost: '0.00'
-                            });
-                        });
-
-                } catch (parseErr) {
-                    console.warn('k8s resource parse error:', parseErr.message);
-                }
-                resolve();
-            });
-        });
 
         res.json({ success: true, count: resources.length, instances: resources });
 
