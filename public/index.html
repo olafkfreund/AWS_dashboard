@@ -910,6 +910,7 @@
             localStorage.setItem('refresh_interval', refresh);
             localStorage.setItem('copilot_ollama_url', ollamaUrl);
             applyTheme(theme);
+            startRefreshInterval();
             
             try {
                 const res = await fetch('/api/config/tokens', {
@@ -1686,6 +1687,27 @@
             }
         }
 
+        let refreshTimerId = null;
+
+        function startRefreshInterval() {
+            if (refreshTimerId) {
+                clearInterval(refreshTimerId);
+                refreshTimerId = null;
+            }
+            
+            const refreshSeconds = parseInt(localStorage.getItem('refresh_interval') || '300');
+            if (refreshSeconds > 0) {
+                console.log(`Starting auto-refresh loop for AWS and Kubernetes every ${refreshSeconds} seconds.`);
+                refreshTimerId = setInterval(() => {
+                    console.log("Auto-refreshing AWS & Kubernetes telemetry...");
+                    fetchResources();
+                    fetchLogins();
+                    fetchSpending();
+                    refreshK8sData();
+                }, refreshSeconds * 1000);
+            }
+        }
+
         // Shared Assistant logic loaded from shared-assistant.js at the bottom of body
 
         // Initialization
@@ -1709,6 +1731,7 @@
             fetchSpending();
             initializeWebMCP();
             refreshK8sData();
+            startRefreshInterval();
             
             // Check if AWS profile supports SSO, otherwise hide the login button
             try {
