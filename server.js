@@ -15,6 +15,7 @@ const { CloudTrailClient, LookupEventsCommand } = require('@aws-sdk/client-cloud
 const { CostExplorerClient, GetCostAndUsageCommand } = require('@aws-sdk/client-cost-explorer');
 const { BudgetsClient, DescribeBudgetsCommand } = require('@aws-sdk/client-budgets');
 const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
+const { EKSClient, ListClustersCommand, DescribeClusterCommand, ListNodegroupsCommand, DescribeNodegroupCommand } = require('@aws-sdk/client-eks');
 const { fromIni } = require('@aws-sdk/credential-providers');
 const { SSOClient, GetRoleCredentialsCommand, ListAccountsCommand, ListAccountRolesCommand } = require("@aws-sdk/client-sso");
 const { SSOOIDCClient, RegisterClientCommand, StartDeviceAuthorizationCommand, CreateTokenCommand } = require("@aws-sdk/client-sso-oidc");
@@ -696,6 +697,8 @@ const cloudtrailClient = new CloudTrailClient(awsConfig);
 const ceClient = new CostExplorerClient(awsConfig);
 const bgClient = new BudgetsClient(awsConfig);
 const s3Client = new S3Client(awsConfig);
+const eksClient = new EKSClient(awsConfig);
+
 
 // Helper to get dynamic AWS Clients based on user SSO session
 function getAwsClients(req) {
@@ -715,7 +718,8 @@ function getAwsClients(req) {
                 cloudtrail: new CloudTrailClient(config),
                 costexplorer: new CostExplorerClient(config),
                 budgets: new BudgetsClient(config),
-                s3: new S3Client(config)
+                s3: new S3Client(config),
+                eks: new EKSClient(config)
             };
         }
     }
@@ -724,7 +728,8 @@ function getAwsClients(req) {
         cloudtrail: cloudtrailClient,
         costexplorer: ceClient,
         budgets: bgClient,
-        s3: s3Client
+        s3: s3Client,
+        eks: eksClient
     };
 }
 
@@ -898,6 +903,58 @@ app.get('/api/resources', async (req, res) => {
             }
         } catch (sgErr) {
             console.error('Error fetching Security Groups:', sgErr);
+        }
+
+        // 6. Fetch EKS Clusters
+        try {
+            const eksListRes = await eks.send(new ListClustersCommand({}));
+            const clusterNames = eksListRes.clusters || [];
+            await Promise.all(clusterNames.map(async (clusterName) => {
+                try {
+                    const descRes = await eks.send(new DescribeClusterCommand({ name: clusterName }));
+                    const cluster = descRes.cluster;
+
+                    // Fetch node groups for cost estimation
+                    let nodeGroupCostTotal = 0;
+                    let nodeGroupSummary = 'No node groups';
+                    try {
+                        const ngListRes = await eks.send(new ListNodegroupsCommand({ clusterName }));
+                        const ngNames = ngListRes.nodegroups || [];
+                        const ngDetails = await Promise.all(ngNames.map(ng =>
+                            eks.send(new DescribeNodegroupCommand({ clusterName, nodegroupName: ng })).catch(() => null)
+                        ));
+                        const validNGs = ngDetails.filter(Boolean).map(r => r.nodegroup);
+                        nodeGroupCostTotal = validNGs.reduce((sum, ng) => {
+                            const desired = ng.scalingConfig?.desiredSize || 0;
+                            const cost = getEc2CostEstimate(ng.instanceTypes?.[0] || 't3.medium');
+                            return sum + (parseFloat(cost.monthlyEstimate) * desired);
+                        }, 0);
+                        nodeGroupSummary = validNGs.length > 0
+                            ? validNGs.map(ng => `${ng.nodegroupName} (${ng.scalingConfig?.desiredSize || 0}×${ng.instanceTypes?.[0] || 'unknown'})`).join(', ')
+                            : 'No node groups';
+                    } catch (ngErr) {
+                        console.error('Error fetching node groups for', clusterName, ngErr.message);
+                    }
+
+                    resources.push({
+                        id: cluster.name,
+                        name: cluster.name,
+                        type: `EKS ${cluster.version} • ${nodeGroupSummary}`,
+                        service: 'EKS',
+                        state: cluster.status === 'ACTIVE' ? 'running' : cluster.status.toLowerCase(),
+                        launchTime: cluster.createdAt,
+                        publicIp: cluster.endpoint ? cluster.endpoint.replace('https://', '') : 'Private Endpoint',
+                        costEstimate: nodeGroupCostTotal.toFixed(2),
+                        lastMonthUsage: nodeGroupSummary,
+                        lastMonthCost: nodeGroupCostTotal.toFixed(2),
+                        region: cluster.arn?.split(':')[3] || 'eu-west-2'
+                    });
+                } catch (descErr) {
+                    console.error('Error describing EKS cluster', clusterName, descErr.message);
+                }
+            }));
+        } catch (eksErr) {
+            console.error('Error fetching EKS clusters:', eksErr.message);
         }
 
         res.json({ success: true, count: resources.length, instances: resources });
