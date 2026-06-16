@@ -1167,19 +1167,28 @@ app.get('/api/resources', async (req, res) => {
                     const totalCost = (73 + nodeGroupCostTotal).toFixed(2);
 
                     resources.push({
-                        id: cluster.name,
-                        name: cluster.name,
-                        type: `EKS ${cluster.version} • ${nodeGroupSummary}`,
-                        service: 'EKS',
-                        group: `EKS: ${cluster.name}`,
-                        state: cluster.status === 'ACTIVE' ? 'running' : cluster.status.toLowerCase(),
-                        launchTime: cluster.createdAt,
-                        publicIp: cluster.endpoint ? cluster.endpoint.replace('https://', '') : 'Private Endpoint',
+                        id:           cluster.arn || cluster.name,
+                        name:         cluster.name,
+                        type:         `EKS v${cluster.version} • ${nodeGroupSummary}`,
+                        service:      'EKS',
+                        group:        `EKS: ${cluster.name}`,
+                        state:        cluster.status === 'ACTIVE' ? 'running' : cluster.status.toLowerCase(),
+                        launchTime:   cluster.createdAt,
+                        publicIp:     cluster.endpoint || null,
                         costEstimate: totalCost,
-                        lastMonthUsage: nodeGroupSummary,
                         lastMonthCost: totalCost,
-                        region: cluster.arn?.split(':')[3] || 'eu-west-2',
-                        vpcName: clusterVpcName
+                        lastMonthUsage: nodeGroupSummary,
+                        region:       cluster.arn?.split(':')[3] || 'eu-west-2',
+                        // EKS detail panel fields
+                        version:      cluster.version,
+                        endpoint:     cluster.endpoint || null,
+                        vpcId:        cluster.resourcesVpcConfig?.vpcId || null,
+                        vpcName:      clusterVpcName,
+                        subnetCount:  cluster.resourcesVpcConfig?.subnetIds?.length || 0,
+                        publicAccess: cluster.resourcesVpcConfig?.endpointPublicAccess ?? true,
+                        privateAccess: cluster.resourcesVpcConfig?.endpointPrivateAccess ?? true,
+                        nodeCount:    nodeGroupCostTotal > 0 ? validNGs?.reduce((s,ng)=>s+(ng.scalingConfig?.desiredSize||0),0) : 0,
+                        totalNodes:   validNGs?.reduce ? validNGs.reduce((s,ng)=>s+(ng.scalingConfig?.desiredSize||0),0) : 0,
                     });
                 } catch (descErr) {
                     console.error('Error describing EKS cluster', clusterName, descErr.message);
