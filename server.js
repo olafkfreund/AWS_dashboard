@@ -648,6 +648,39 @@ app.post('/api/config/tokens', (req, res) => {
     }
 });
 
+// Kubernetes Status Endpoint
+app.get('/api/k8s/status', (req, res) => {
+    const context = req.query.context || 'k3d-review-cluster';
+    
+    if (!/^[a-zA-Z0-9\-_:]+$/.test(context)) {
+        return res.status(400).json({ success: false, error: 'Invalid context name' });
+    }
+    
+    const cmd = `kubectl --context="${context}" get nodes -o json && echo "---SPLIT---" && kubectl --context="${context}" get deployments -A -o json && echo "---SPLIT---" && kubectl --context="${context}" get pods -A -o json`;
+    
+    exec(cmd, (err, stdout, stderr) => {
+        if (err) {
+            return res.json({ success: false, error: err.message, stderr });
+        }
+        try {
+            const parts = stdout.split('---SPLIT---');
+            const nodes = JSON.parse(parts[0] || '{}');
+            const deployments = JSON.parse(parts[1] || '{}');
+            const pods = JSON.parse(parts[2] || '{}');
+            
+            res.json({
+                success: true,
+                context,
+                nodes: nodes.items || [],
+                deployments: deployments.items || [],
+                pods: pods.items || []
+            });
+        } catch (e) {
+            res.json({ success: false, error: "Failed to parse JSON output: " + e.message });
+        }
+    });
+});
+
 const ec2Client = new EC2Client(awsConfig);
 const cloudtrailClient = new CloudTrailClient(awsConfig);
 const ceClient = new CostExplorerClient(awsConfig);

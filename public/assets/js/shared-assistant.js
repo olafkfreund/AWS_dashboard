@@ -112,7 +112,8 @@
     const assistantTelemetry = {
         aws: { resources: [], logins: [], spending: null },
         github: { repos: [], prs: [], issues: [] },
-        gitlab: { repos: [], mrs: [], issues: [] }
+        gitlab: { repos: [], mrs: [], issues: [] },
+        k8s: { context: 'k3d-review-cluster', nodes: [], deployments: [], pods: [] }
     };
 
     // Load initial cached telemetry from localStorage to have it instantly
@@ -129,6 +130,10 @@
             assistantTelemetry.gitlab.repos = JSON.parse(localStorage.getItem('gl_active_repos') || '[]');
             assistantTelemetry.gitlab.mrs = JSON.parse(localStorage.getItem('gl_active_mrs') || '[]');
             assistantTelemetry.gitlab.issues = JSON.parse(localStorage.getItem('gl_active_issues') || '[]');
+
+            assistantTelemetry.k8s.nodes = JSON.parse(localStorage.getItem('k8s_nodes') || '[]');
+            assistantTelemetry.k8s.deployments = JSON.parse(localStorage.getItem('k8s_deployments') || '[]');
+            assistantTelemetry.k8s.pods = JSON.parse(localStorage.getItem('k8s_pods') || '[]');
         } catch (e) {
             console.error("Error loading cached telemetry:", e);
         }
@@ -237,6 +242,22 @@
                 console.warn("Failed background-fetching GitLab telemetry:", e);
             }
         }
+
+        // 4. Kubernetes API Status
+        try {
+            const k8sRes = await fetch('/api/k8s/status').then(r => r.json()).catch(() => null);
+            if (k8sRes && k8sRes.success) {
+                assistantTelemetry.k8s.nodes = k8sRes.nodes;
+                assistantTelemetry.k8s.deployments = k8sRes.deployments;
+                assistantTelemetry.k8s.pods = k8sRes.pods;
+                
+                localStorage.setItem('k8s_nodes', JSON.stringify(k8sRes.nodes));
+                localStorage.setItem('k8s_deployments', JSON.stringify(k8sRes.deployments));
+                localStorage.setItem('k8s_pods', JSON.stringify(k8sRes.pods));
+            }
+        } catch (e) {
+            console.warn("Error background-fetching Kubernetes telemetry:", e);
+        }
     }
 
     // --- 3. SYSTEM PROMPT CONSTRUCT ---
@@ -252,6 +273,10 @@
         const glRepos = assistantTelemetry.gitlab.repos || [];
         const glMrs = assistantTelemetry.gitlab.mrs || [];
         const glIssues = assistantTelemetry.gitlab.issues || [];
+
+        const k8sNodes = assistantTelemetry.k8s.nodes || [];
+        const k8sDeps = assistantTelemetry.k8s.deployments || [];
+        const k8sPods = assistantTelemetry.k8s.pods || [];
         
         // AWS formatting
         const awsInstSummary = awsResources.map(inst => {
@@ -280,9 +305,27 @@
         const glMrSummary = glMrs.slice(0, 5).map(mr => `- !${mr.iid}: "${mr.title}"`).join('\n');
         const glIssueSummary = glIssues.slice(0, 5).map(iss => `- #${iss.iid}: "${iss.title}"`).join('\n');
 
+        // Kubernetes formatting
+        const k8sNodeSummary = k8sNodes.map(n => {
+            const statusObj = n.status || {};
+            const conds = statusObj.conditions || [];
+            const readyCond = conds.find(c => c.type === 'Ready') || {};
+            return `- Node ${n.metadata.name}: Ready=${readyCond.status || 'Unknown'}, Version=${statusObj.nodeInfo ? statusObj.nodeInfo.kubeletVersion : 'N/A'}`;
+        }).join('\n');
+        
+        const k8sDepSummary = k8sDeps.map(d => {
+            const statusObj = d.status || {};
+            return `- Deployment ${d.metadata.name} in "${d.metadata.namespace}": Replicas=${statusObj.replicas || 0}, ReadyReplicas=${statusObj.readyReplicas || 0}`;
+        }).join('\n');
+        
+        const k8sPodSummary = k8sPods.map(p => {
+            const statusObj = p.status || {};
+            return `- Pod ${p.metadata.name} in "${p.metadata.namespace}": Status=${statusObj.phase || 'Unknown'}, IP=${statusObj.podIP || 'None'}`;
+        }).join('\n');
+
         return `You are ${providerName}, an AI Assistant integrated into Olaf's AWS & DevOps Management Dashboard.
-You are helping Olaf Krasicki-Freund manage his cloud infrastructure and software repositories.
-Here is the current live state of the entire portal (AWS, GitHub, and GitLab):
+You are helping Olaf Krasicki-Freund manage his cloud infrastructure, software repositories, and Kubernetes deployments.
+Here is the current live state of the entire portal (AWS, GitHub, GitLab, and local Kubernetes):
 
 AWS Environment:
 - Active EC2 Instances (${awsResources.length} total):
@@ -308,7 +351,15 @@ ${glMrSummary || 'None'}
 - Open Issues:
 ${glIssueSummary || 'None'}
 
-Please answer Olaf's questions about any of these resources, pull requests, merge requests, issues, logins, spending/budgets, or general DevOps questions, keeping in mind your role as ${providerName}. Keep your responses helpful, concise, and formatted in Markdown.`;
+Kubernetes Environment (Context: k3d-review-cluster):
+- Nodes:
+${k8sNodeSummary || 'None'}
+- Deployments:
+${k8sDepSummary || 'None'}
+- Pods:
+${k8sPodSummary || 'None'}
+
+Please answer Olaf's questions about any of these resources, pull requests, merge requests, issues, logins, spending/budgets, Kubernetes status/deployments, or general DevOps questions, keeping in mind your role as ${providerName}. Keep your responses helpful, concise, and formatted in Markdown.`;
     }
 
     // --- 4. OLLAMA MODEL MATCHING ---
@@ -392,7 +443,9 @@ Please answer Olaf's questions about any of these resources, pull requests, merg
         if (!chatBtn || !chatPopup) return;
 
         // Load saved provider & voice feedback settings
-        const savedProvider = localStorage.getItem('copilot_provider') || 'github-copilot';
+        let savedProvider = localStorage.getItem('copilot_provider') || 'github-copilot';
+        if (savedProvider === 'github') savedProvider = 'github-copilot';
+        if (savedProvider === 'gitlab') savedProvider = 'gitlab-duo';
         providerSelect.value = savedProvider;
 
         const voiceChecked = localStorage.getItem('copilot_voice_feedback') === 'true';
