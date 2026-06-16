@@ -257,16 +257,32 @@
   // --- THEME MANAGEMENT ---
   function setupTheme() {
     document.documentElement.setAttribute('data-theme', state.theme);
-    if (el.themeToggle) {
-      el.themeToggle.checked = (state.theme === 'light');
+    updateThemeIcon(state.theme);
+  }
+
+  function updateThemeIcon(theme) {
+    const iconEl = document.getElementById('theme-toggle-icon');
+    if (iconEl) {
+      if (theme === 'light') {
+        iconEl.className = 'fa-solid fa-sun text-amber-500';
+      } else {
+        iconEl.className = 'fa-solid fa-moon text-primary';
+      }
     }
   }
 
-  function toggleTheme() {
+  window.toggleTheme = function() {
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('theme', state.theme);
-    document.documentElement.setAttribute('data-theme', state.theme);
-  }
+    setupTheme();
+  };
+
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'theme') {
+      state.theme = e.newValue || 'dark';
+      setupTheme();
+    }
+  });
 
   // --- NAVIGATION & VIEWS ---
   function setupNavigation() {

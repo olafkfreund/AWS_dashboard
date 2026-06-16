@@ -24,12 +24,17 @@
 <body>
 
     <!-- Central Navigation Tabs -->
-    <div style="display: flex; justify-content: center; padding-top: 16px; padding-bottom: 16px; background-color: var(--bg-medium); z-index: 1000; position: relative; width: 100%;">
-        <div style="display: flex; padding: 4px; border-radius: 12px; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); gap: 4px;">
-            <a href="../index.html" style="padding: 8px 24px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">AWS Overview</a>
-            <a href="../gitlab/index.html" style="padding: 8px 24px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">GitLab</a>
-            <a href="../github/index.html" style="padding: 8px 24px; border-radius: 8px; background: #1e293b; color: white; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">GitHub</a>
-            <a href="../index.html?view=settings" style="padding: 8px 24px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">Settings</a>
+    <div class="nav-container-wrapper" style="display: flex; justify-content: center; padding-top: 16px; padding-bottom: 16px; background-color: var(--bg-hard); z-index: 1000; position: relative; width: 100%;">
+        <div class="nav-container" style="display: flex; align-items: center; padding: 6px; border-radius: 12px; background: var(--bg-medium); border: 1px solid var(--border-color); gap: 4px; box-shadow: 0 4px 6px -1px var(--shadow-color);">
+            <a href="../index.html" style="padding: 8px 20px; border-radius: 8px; color: var(--fg-muted); text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif; transition: all 0.2s;">AWS Overview</a>
+            <a href="../index.html?view=projects" style="padding: 8px 20px; border-radius: 8px; color: var(--fg-muted); text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif; transition: all 0.2s;">My Projects</a>
+            <a href="../gitlab/index.html" style="padding: 8px 20px; border-radius: 8px; color: var(--fg-muted); text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif; transition: all 0.2s;">GitLab</a>
+            <a href="../github/index.html" style="padding: 8px 20px; border-radius: 8px; background: var(--bg-soft); color: var(--fg-primary); text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif; border: 1px solid var(--border-color); box-shadow: 0 1px 3px 0 var(--shadow-color); transition: all 0.2s;">GitHub</a>
+            <a href="../index.html?view=settings" style="padding: 8px 20px; border-radius: 8px; color: var(--fg-muted); text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif; transition: all 0.2s;">Settings</a>
+            <div style="width: 1px; height: 24px; background-color: var(--border-color); margin: 0 8px;"></div>
+            <button id="theme-toggle-btn" onclick="toggleTheme()" style="background: none; border: none; cursor: pointer; color: var(--fg-muted); padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; transition: all 0.2s;" title="Toggle theme">
+                <i class="fa-solid fa-moon text-base" id="theme-toggle-icon"></i>
+            </button>
         </div>
     </div>
     
@@ -75,13 +80,7 @@
   </ul>
 
   <div class="sidebar-footer">
-    <div class="theme-toggle-container">
-      <span><i class="fa-solid fa-circle-half-stroke"></i> Theme Mode</span>
-      <label class="switch">
-        <input type="checkbox" id="theme-toggle">
-        <span class="slider"></span>
-      </label>
-    </div>
+
     <div class="agent-status-card">
       <div class="agent-status-header">
         <span><i class="fa-solid fa-terminal"></i> WebMCP AGENT</span>

@@ -11,8 +11,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-budgets": "^3.1070.0",
     "@aws-sdk/client-cloudtrail": "^3.1069.0",
+    "@aws-sdk/client-cost-explorer": "^3.1070.0",
     "@aws-sdk/client-ec2": "^3.1069.0",
+    "@aws-sdk/client-s3": "^3.1070.0",
     "@aws-sdk/client-sso": "^3.1069.0",
     "@aws-sdk/client-sso-oidc": "^3.1069.0",
     "@aws-sdk/credential-providers": "^3.1069.0",
