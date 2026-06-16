@@ -61,3 +61,19 @@ status:
 # Run syntax check on Javascript files
 check:
     node --check server.js mcp_server.js compile.js mcp-bridge.js
+
+# Deploy the Lambda test web app to AWS (idempotent)
+deploy-webapp:
+    bash infra/webapp/deploy-webapp.sh
+
+# Create the minimal EKS test cluster (~15 min)
+eks-create:
+    eksctl create cluster -f infra/eks/cluster.yaml
+
+# Delete the EKS test cluster and all its resources
+eks-delete:
+    eksctl delete cluster -f infra/eks/cluster.yaml --disable-nodegroup-eviction
+
+# Show EKS cluster status
+eks-status:
+    eksctl get cluster --name sarc-portal-test --region eu-west-2
