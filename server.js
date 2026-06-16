@@ -4,7 +4,13 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { exec } = require('child_process');
-const { EC2Client, DescribeInstancesCommand } = require('@aws-sdk/client-ec2');
+const { 
+    EC2Client, 
+    DescribeInstancesCommand,
+    DescribeVpcsCommand,
+    DescribeSubnetsCommand,
+    DescribeSecurityGroupsCommand
+} = require('@aws-sdk/client-ec2');
 const { CloudTrailClient, LookupEventsCommand } = require('@aws-sdk/client-cloudtrail');
 const { CostExplorerClient, GetCostAndUsageCommand } = require('@aws-sdk/client-cost-explorer');
 const { BudgetsClient, DescribeBudgetsCommand } = require('@aws-sdk/client-budgets');
@@ -340,7 +346,7 @@ delete process.env.AWS_SESSION_TOKEN;
 
 const awsConfig = {
     credentials: fromIni({ profile: awsProfile }),
-    region: process.env.AWS_REGION || 'us-east-1'
+    region: process.env.AWS_REGION || 'eu-west-2'
 };
 
 // In-memory OIDC client registration cache
@@ -702,7 +708,7 @@ function getAwsClients(req) {
                     secretAccessKey: creds.secretAccessKey,
                     sessionToken: creds.sessionToken
                 },
-                region: process.env.AWS_REGION || 'us-east-1'
+                region: process.env.AWS_REGION || 'eu-west-2'
             };
             return {
                 ec2: new EC2Client(config),
@@ -756,19 +762,15 @@ const getS3CostEstimate = (bucketName) => {
     };
 };
 
-// Endpoint to get running AWS resources (EC2 instances and S3 buckets)
+// Endpoint to get all AWS resources (EC2 instances, S3 buckets, VPCs, Subnets, Security Groups)
 app.get('/api/resources', async (req, res) => {
     try {
         const { ec2, s3 } = getAwsClients(req);
         const resources = [];
         
-        // 1. Fetch EC2 instances
+        // 1. Fetch EC2 instances (all states)
         try {
-            const command = new DescribeInstancesCommand({
-                Filters: [
-                    { Name: 'instance-state-name', Values: ['running'] }
-                ]
-            });
+            const command = new DescribeInstancesCommand({});
             const response = await ec2.send(command);
             if (response.Reservations) {
                 response.Reservations.forEach(reservation => {
@@ -777,14 +779,16 @@ app.get('/api/resources', async (req, res) => {
                             const nameTag = instance.Tags?.find(tag => tag.Key === 'Name');
                             const type = instance.InstanceType;
                             const cost = getEc2CostEstimate(type);
+                            const stateName = instance.State?.Name || 'running';
                             resources.push({
                                 id: instance.InstanceId,
                                 name: nameTag ? nameTag.Value : 'Unnamed EC2',
                                 type: type,
                                 service: 'EC2',
+                                state: stateName,
                                 launchTime: instance.LaunchTime,
                                 publicIp: instance.PublicIpAddress || 'Private Only',
-                                costEstimate: cost.monthlyEstimate,
+                                costEstimate: stateName === 'running' ? cost.monthlyEstimate : '0.00',
                                 lastMonthUsage: cost.lastMonthUsage,
                                 lastMonthCost: cost.lastMonthCost
                             });
@@ -808,6 +812,7 @@ app.get('/api/resources', async (req, res) => {
                         name: bucket.Name,
                         type: 'Standard S3 Bucket',
                         service: 'S3',
+                        state: 'running',
                         launchTime: bucket.CreationDate,
                         publicIp: 'N/A (Object Storage)',
                         costEstimate: cost.monthlyEstimate,
@@ -818,6 +823,81 @@ app.get('/api/resources', async (req, res) => {
             }
         } catch (s3Err) {
             console.error('Error fetching S3 buckets:', s3Err);
+        }
+
+        // 3. Fetch VPCs
+        try {
+            const vpcCommand = new DescribeVpcsCommand({});
+            const vpcResponse = await ec2.send(vpcCommand);
+            if (vpcResponse.Vpcs) {
+                vpcResponse.Vpcs.forEach(vpc => {
+                    const nameTag = vpc.Tags?.find(tag => tag.Key === 'Name');
+                    resources.push({
+                        id: vpc.VpcId,
+                        name: nameTag ? nameTag.Value : 'Unnamed VPC',
+                        type: vpc.CidrBlock,
+                        service: 'VPC',
+                        state: 'running',
+                        launchTime: null,
+                        publicIp: 'N/A (Virtual Network)',
+                        costEstimate: '0.00',
+                        lastMonthUsage: 'N/A',
+                        lastMonthCost: '0.00'
+                    });
+                });
+            }
+        } catch (vpcErr) {
+            console.error('Error fetching VPCs:', vpcErr);
+        }
+
+        // 4. Fetch Subnets
+        try {
+            const subnetCommand = new DescribeSubnetsCommand({});
+            const subnetResponse = await ec2.send(subnetCommand);
+            if (subnetResponse.Subnets) {
+                subnetResponse.Subnets.forEach(subnet => {
+                    const nameTag = subnet.Tags?.find(tag => tag.Key === 'Name');
+                    resources.push({
+                        id: subnet.SubnetId,
+                        name: nameTag ? nameTag.Value : 'Unnamed Subnet',
+                        type: `${subnet.CidrBlock} (${subnet.AvailabilityZone})`,
+                        service: 'Subnet',
+                        state: 'running',
+                        launchTime: null,
+                        publicIp: 'N/A (Network Subnet)',
+                        costEstimate: '0.00',
+                        lastMonthUsage: 'N/A',
+                        lastMonthCost: '0.00'
+                    });
+                });
+            }
+        } catch (subnetErr) {
+            console.error('Error fetching Subnets:', subnetErr);
+        }
+
+        // 5. Fetch Security Groups
+        try {
+            const sgCommand = new DescribeSecurityGroupsCommand({});
+            const sgResponse = await ec2.send(sgCommand);
+            if (sgResponse.SecurityGroups) {
+                sgResponse.SecurityGroups.forEach(sg => {
+                    const nameTag = sg.Tags?.find(tag => tag.Key === 'Name');
+                    resources.push({
+                        id: sg.GroupId,
+                        name: nameTag ? nameTag.Value : sg.GroupName,
+                        type: sg.Description || 'Security Group',
+                        service: 'SecurityGroup',
+                        state: 'running',
+                        launchTime: null,
+                        publicIp: 'N/A (Firewall Rules)',
+                        costEstimate: '0.00',
+                        lastMonthUsage: 'N/A',
+                        lastMonthCost: '0.00'
+                    });
+                });
+            }
+        } catch (sgErr) {
+            console.error('Error fetching Security Groups:', sgErr);
         }
 
         res.json({ success: true, count: resources.length, instances: resources });
