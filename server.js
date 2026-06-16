@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 const { EKSClient, ListClustersCommand, DescribeClusterCommand, ListNodegroupsCommand, DescribeNodegroupCommand } = require('@aws-sdk/client-eks');
 const { LambdaClient, ListFunctionsCommand, GetFunctionUrlConfigCommand } = require('@aws-sdk/client-lambda');
-const { CloudFormationClient, ListStacksCommand: ListCFNStacksCommand, DescribeStacksCommand } = require('@aws-sdk/client-cloudformation');
+const { CloudFormationClient, ListStacksCommand: ListCFNStacksCommand } = require('@aws-sdk/client-cloudformation');
 const {
     EC2Client,
     DescribeInstancesCommand,
@@ -14,12 +14,27 @@ const {
     DescribeSubnetsCommand,
     DescribeSecurityGroupsCommand,
     DescribeNatGatewaysCommand,
-    DescribeInternetGatewaysCommand
+    DescribeInternetGatewaysCommand,
+    DescribeAddressesCommand,
+    DescribeVolumesCommand,
 } = require('@aws-sdk/client-ec2');
+
 const { CloudTrailClient, LookupEventsCommand } = require('@aws-sdk/client-cloudtrail');
 const { CostExplorerClient, GetCostAndUsageCommand } = require('@aws-sdk/client-cost-explorer');
 const { BudgetsClient, DescribeBudgetsCommand } = require('@aws-sdk/client-budgets');
 const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
+const { IAMClient, ListRolesCommand, ListUsersCommand, ListPoliciesCommand, ListGroupsCommand } = require('@aws-sdk/client-iam');
+const { RDSClient, DescribeDBInstancesCommand, DescribeDBClustersCommand } = require('@aws-sdk/client-rds');
+const { DynamoDBClient, ListTablesCommand } = require('@aws-sdk/client-dynamodb');
+const { ECRClient, DescribeRepositoriesCommand } = require('@aws-sdk/client-ecr');
+const { SNSClient, ListTopicsCommand } = require('@aws-sdk/client-sns');
+const { SQSClient, ListQueuesCommand, GetQueueAttributesCommand } = require('@aws-sdk/client-sqs');
+const { SecretsManagerClient, ListSecretsCommand } = require('@aws-sdk/client-secrets-manager');
+const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeTargetGroupsCommand } = require('@aws-sdk/client-elastic-load-balancing-v2');
+const { AutoScalingClient, DescribeAutoScalingGroupsCommand } = require('@aws-sdk/client-auto-scaling');
+const { CloudWatchClient, DescribeAlarmsCommand } = require('@aws-sdk/client-cloudwatch');
+const { Route53Client, ListHostedZonesCommand, ListResourceRecordSetsCommand } = require('@aws-sdk/client-route-53');
+const { SSMClient, DescribeParametersCommand } = require('@aws-sdk/client-ssm');
 const { fromIni } = require('@aws-sdk/credential-providers');
 const { SSOClient, GetRoleCredentialsCommand, ListAccountsCommand, ListAccountRolesCommand } = require("@aws-sdk/client-sso");
 const { SSOOIDCClient, RegisterClientCommand, StartDeviceAuthorizationCommand, CreateTokenCommand } = require("@aws-sdk/client-sso-oidc");
@@ -747,6 +762,19 @@ const s3Client = new S3Client(awsConfig);
 const eksClient = new EKSClient(awsConfig);
 const lambdaClient = new LambdaClient(awsConfig);
 const cfnClient = new CloudFormationClient(awsConfig);
+const iamClient = new IAMClient(awsConfig);
+const rdsClient = new RDSClient(awsConfig);
+const dynamoClient = new DynamoDBClient(awsConfig);
+const ecrClient = new ECRClient(awsConfig);
+const snsClient = new SNSClient(awsConfig);
+const sqsClient = new SQSClient(awsConfig);
+const secretsClient = new SecretsManagerClient(awsConfig);
+const elbClient = new ElasticLoadBalancingV2Client(awsConfig);
+const asgClient = new AutoScalingClient(awsConfig);
+const cwClient = new CloudWatchClient(awsConfig);
+const route53Client = new Route53Client({ ...awsConfig, region: 'us-east-1' });
+const ssmClient = new SSMClient(awsConfig);
+
 
 
 // Helper to get dynamic AWS Clients based on user SSO session
@@ -770,7 +798,19 @@ function getAwsClients(req) {
                 s3: new S3Client(config),
                 eks: new EKSClient(config),
                 lambda: new LambdaClient(config),
-                cfn: new CloudFormationClient(config)
+                cfn: new CloudFormationClient(config),
+                iam: new IAMClient(config),
+                rds: new RDSClient(config),
+                dynamo: new DynamoDBClient(config),
+                ecr: new ECRClient(config),
+                sns: new SNSClient(config),
+                sqs: new SQSClient(config),
+                secrets: new SecretsManagerClient(config),
+                elb: new ElasticLoadBalancingV2Client(config),
+                asg: new AutoScalingClient(config),
+                cw: new CloudWatchClient(config),
+                route53: new Route53Client({ ...config, region: 'us-east-1' }),
+                ssm: new SSMClient(config)
             };
         }
     }
@@ -782,7 +822,19 @@ function getAwsClients(req) {
         s3: s3Client,
         eks: eksClient,
         lambda: lambdaClient,
-        cfn: cfnClient
+        cfn: cfnClient,
+        iam: iamClient,
+        rds: rdsClient,
+        dynamo: dynamoClient,
+        ecr: ecrClient,
+        sns: snsClient,
+        sqs: sqsClient,
+        secrets: secretsClient,
+        elb: elbClient,
+        asg: asgClient,
+        cw: cwClient,
+        route53: route53Client,
+        ssm: ssmClient
     };
 }
 
@@ -1165,6 +1217,347 @@ app.get('/api/resources', async (req, res) => {
             }
         } catch (lambdaErr) { console.error('Error fetching Lambda functions:', lambdaErr.message); }
 
+        const { iam, rds, dynamo, ecr, sns, sqs, secrets, elb, asg, cw, route53, ssm } = getAwsClients(req);
+
+        // ── IAM: Roles ──────────────────────────────────────────────────────
+        try {
+            let marker;
+            do {
+                const r = await iam.send(new ListRolesCommand({ Marker: marker, MaxItems: 100 }));
+                (r.Roles || []).forEach(role => {
+                    // Skip AWS service-linked roles to reduce noise
+                    if (role.Path === '/aws-service-role/') return;
+                    resources.push({
+                        id: role.RoleId,
+                        name: role.RoleName,
+                        type: `IAM Role • ${role.Path}`,
+                        service: 'IAM Role',
+                        group: 'IAM',
+                        state: 'running',
+                        launchTime: role.CreateDate,
+                        publicIp: 'N/A',
+                        costEstimate: '0.00',
+                        lastMonthUsage: 'N/A',
+                        lastMonthCost: '0.00'
+                    });
+                });
+                marker = r.IsTruncated ? r.Marker : null;
+            } while (marker);
+        } catch (e) { console.error('Error fetching IAM roles:', e.message); }
+
+        // ── IAM: Users ──────────────────────────────────────────────────────
+        try {
+            let marker;
+            do {
+                const r = await iam.send(new ListUsersCommand({ Marker: marker, MaxItems: 100 }));
+                (r.Users || []).forEach(user => {
+                    resources.push({
+                        id: user.UserId,
+                        name: user.UserName,
+                        type: `IAM User • ${user.Path}`,
+                        service: 'IAM User',
+                        group: 'IAM',
+                        state: 'running',
+                        launchTime: user.CreateDate,
+                        publicIp: 'N/A',
+                        costEstimate: '0.00',
+                        lastMonthUsage: 'N/A',
+                        lastMonthCost: '0.00'
+                    });
+                });
+                marker = r.IsTruncated ? r.Marker : null;
+            } while (marker);
+        } catch (e) { console.error('Error fetching IAM users:', e.message); }
+
+        // ── RDS: DB Instances ────────────────────────────────────────────────
+        try {
+            const r = await rds.send(new DescribeDBInstancesCommand({}));
+            (r.DBInstances || []).forEach(db => {
+                const RDS_RATES = { 'db.t3.micro': 13.87, 'db.t3.small': 27.74, 'db.t3.medium': 55.48, 'db.m5.large': 150.40 };
+                const cost = (RDS_RATES[db.DBInstanceClass] || 100).toFixed(2);
+                resources.push({
+                    id: db.DBInstanceIdentifier,
+                    name: db.DBInstanceIdentifier,
+                    type: `RDS ${db.Engine} ${db.EngineVersion} • ${db.DBInstanceClass}`,
+                    service: 'RDS',
+                    group: 'Databases',
+                    state: db.DBInstanceStatus === 'available' ? 'running' : db.DBInstanceStatus,
+                    launchTime: db.InstanceCreateTime,
+                    publicIp: db.Endpoint?.Address || 'Private',
+                    costEstimate: ['available', 'running'].includes(db.DBInstanceStatus) ? cost : '0.00',
+                    lastMonthUsage: db.DBInstanceClass,
+                    lastMonthCost: cost
+                });
+            });
+        } catch (e) { console.error('Error fetching RDS instances:', e.message); }
+
+        // ── RDS: Aurora Clusters ─────────────────────────────────────────────
+        try {
+            const r = await rds.send(new DescribeDBClustersCommand({}));
+            (r.DBClusters || []).forEach(cluster => {
+                resources.push({
+                    id: cluster.DBClusterIdentifier,
+                    name: cluster.DBClusterIdentifier,
+                    type: `Aurora ${cluster.Engine} ${cluster.EngineVersion} Cluster`,
+                    service: 'RDS Aurora',
+                    group: 'Databases',
+                    state: cluster.Status === 'available' ? 'running' : cluster.Status,
+                    launchTime: cluster.ClusterCreateTime,
+                    publicIp: cluster.Endpoint || 'Private',
+                    costEstimate: '0.00', // billed at instance level
+                    lastMonthUsage: cluster.Engine,
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching RDS clusters:', e.message); }
+
+        // ── DynamoDB Tables ──────────────────────────────────────────────────
+        try {
+            const r = await dynamo.send(new ListTablesCommand({}));
+            (r.TableNames || []).forEach(name => {
+                resources.push({
+                    id: name,
+                    name,
+                    type: 'DynamoDB Table',
+                    service: 'DynamoDB',
+                    group: 'Databases',
+                    state: 'running',
+                    launchTime: null,
+                    publicIp: 'N/A (Serverless)',
+                    costEstimate: '0.00', // usage-based
+                    lastMonthUsage: 'On-demand',
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching DynamoDB tables:', e.message); }
+
+        // ── ECR Repositories ─────────────────────────────────────────────────
+        try {
+            const r = await ecr.send(new DescribeRepositoriesCommand({}));
+            (r.repositories || []).forEach(repo => {
+                resources.push({
+                    id: repo.repositoryArn,
+                    name: repo.repositoryName,
+                    type: `ECR ${repo.imageTagMutability} • ${repo.encryptionConfiguration?.encryptionType || 'AES256'}`,
+                    service: 'ECR',
+                    group: 'Container Registry',
+                    state: 'running',
+                    launchTime: repo.createdAt,
+                    publicIp: repo.repositoryUri,
+                    costEstimate: '0.10', // ~$0.10/GB/month
+                    lastMonthUsage: 'N/A',
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching ECR repos:', e.message); }
+
+        // ── SNS Topics ────────────────────────────────────────────────────────
+        try {
+            const r = await sns.send(new ListTopicsCommand({}));
+            (r.Topics || []).forEach(t => {
+                const name = t.TopicArn.split(':').pop();
+                resources.push({
+                    id: t.TopicArn,
+                    name,
+                    type: 'SNS Topic',
+                    service: 'SNS',
+                    group: 'Messaging',
+                    state: 'running',
+                    launchTime: null,
+                    publicIp: 'N/A',
+                    costEstimate: '0.00',
+                    lastMonthUsage: 'N/A',
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching SNS topics:', e.message); }
+
+        // ── SQS Queues ────────────────────────────────────────────────────────
+        try {
+            const r = await sqs.send(new ListQueuesCommand({ MaxResults: 100 }));
+            (r.QueueUrls || []).forEach(url => {
+                const name = url.split('/').pop();
+                resources.push({
+                    id: url,
+                    name,
+                    type: name.endsWith('.fifo') ? 'SQS FIFO Queue' : 'SQS Standard Queue',
+                    service: 'SQS',
+                    group: 'Messaging',
+                    state: 'running',
+                    launchTime: null,
+                    publicIp: 'N/A',
+                    costEstimate: '0.00',
+                    lastMonthUsage: 'N/A',
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching SQS queues:', e.message); }
+
+        // ── Secrets Manager ───────────────────────────────────────────────────
+        try {
+            const r = await secrets.send(new ListSecretsCommand({ MaxResults: 100 }));
+            (r.SecretList || []).forEach(secret => {
+                resources.push({
+                    id: secret.ARN,
+                    name: secret.Name,
+                    type: `Secret • ${secret.SecretVersionsToStages ? 'Active' : 'Pending'}`,
+                    service: 'Secrets Manager',
+                    group: 'Security & Secrets',
+                    state: 'running',
+                    launchTime: secret.CreatedDate,
+                    publicIp: 'N/A',
+                    costEstimate: '0.40', // $0.40/secret/month
+                    lastMonthUsage: 'N/A',
+                    lastMonthCost: '0.40'
+                });
+            });
+        } catch (e) { console.error('Error fetching Secrets Manager:', e.message); }
+
+        // ── Load Balancers (ALB/NLB) ──────────────────────────────────────────
+        try {
+            const r = await elb.send(new DescribeLoadBalancersCommand({}));
+            (r.LoadBalancers || []).forEach(lb => {
+                const cost = lb.Type === 'network' ? 17.52 : 18.25; // ALB $18.25/mo, NLB $17.52/mo approx
+                resources.push({
+                    id: lb.LoadBalancerArn,
+                    name: lb.LoadBalancerName,
+                    type: `${lb.Type?.toUpperCase() || 'ALB'} Load Balancer • ${lb.Scheme}`,
+                    service: 'Load Balancer',
+                    group: 'Networking',
+                    state: lb.State?.Code === 'active' ? 'running' : lb.State?.Code || 'unknown',
+                    launchTime: lb.CreatedTime,
+                    publicIp: lb.DNSName || 'N/A',
+                    costEstimate: lb.State?.Code === 'active' ? cost.toFixed(2) : '0.00',
+                    lastMonthUsage: lb.Type,
+                    lastMonthCost: cost.toFixed(2)
+                });
+            });
+        } catch (e) { console.error('Error fetching Load Balancers:', e.message); }
+
+        // ── Auto Scaling Groups ────────────────────────────────────────────────
+        try {
+            const r = await asg.send(new DescribeAutoScalingGroupsCommand({}));
+            (r.AutoScalingGroups || []).forEach(g => {
+                resources.push({
+                    id: g.AutoScalingGroupARN,
+                    name: g.AutoScalingGroupName,
+                    type: `ASG • min:${g.MinSize} max:${g.MaxSize} desired:${g.DesiredCapacity}`,
+                    service: 'Auto Scaling',
+                    group: 'Compute',
+                    state: g.DesiredCapacity > 0 ? 'running' : 'stopped',
+                    launchTime: g.CreatedTime,
+                    publicIp: 'N/A',
+                    costEstimate: '0.00', // instances billed separately
+                    lastMonthUsage: `${g.Instances?.length || 0} instances`,
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching ASGs:', e.message); }
+
+        // ── CloudWatch Alarms ─────────────────────────────────────────────────
+        try {
+            const r = await cw.send(new DescribeAlarmsCommand({ MaxRecords: 100 }));
+            (r.MetricAlarms || []).forEach(alarm => {
+                const stateMap = { OK: 'running', ALARM: 'failed', INSUFFICIENT_DATA: 'updating' };
+                resources.push({
+                    id: alarm.AlarmArn,
+                    name: alarm.AlarmName,
+                    type: `CloudWatch Alarm • ${alarm.Statistic || alarm.ExtendedStatistic} ${alarm.MetricName}`,
+                    service: 'CloudWatch',
+                    group: 'Monitoring',
+                    state: stateMap[alarm.StateValue] || 'unknown',
+                    launchTime: alarm.AlarmConfigurationUpdatedTimestamp,
+                    publicIp: alarm.StateValue,
+                    costEstimate: '0.10', // $0.10/alarm/month
+                    lastMonthUsage: alarm.StateValue,
+                    lastMonthCost: '0.10'
+                });
+            });
+        } catch (e) { console.error('Error fetching CloudWatch alarms:', e.message); }
+
+        // ── Route 53 Hosted Zones ─────────────────────────────────────────────
+        try {
+            const r = await route53.send(new ListHostedZonesCommand({}));
+            (r.HostedZones || []).forEach(zone => {
+                resources.push({
+                    id: zone.Id,
+                    name: zone.Name.replace(/\.$/, ''),
+                    type: `Route53 ${zone.Config?.PrivateZone ? 'Private' : 'Public'} Zone • ${zone.ResourceRecordSetCount} records`,
+                    service: 'Route53',
+                    group: 'DNS & Domains',
+                    state: 'running',
+                    launchTime: null,
+                    publicIp: 'N/A',
+                    costEstimate: zone.Config?.PrivateZone ? '0.50' : '0.50', // $0.50/zone/month
+                    lastMonthUsage: `${zone.ResourceRecordSetCount} records`,
+                    lastMonthCost: '0.50'
+                });
+            });
+        } catch (e) { console.error('Error fetching Route53 zones:', e.message); }
+
+        // ── SSM Parameter Store ───────────────────────────────────────────────
+        try {
+            const r = await ssm.send(new DescribeParametersCommand({ MaxResults: 50 }));
+            (r.Parameters || []).forEach(p => {
+                resources.push({
+                    id: p.Name,
+                    name: p.Name.split('/').pop(),
+                    type: `SSM ${p.Type} Parameter`,
+                    service: 'SSM Parameter',
+                    group: 'Security & Secrets',
+                    state: 'running',
+                    launchTime: p.LastModifiedDate,
+                    publicIp: 'N/A',
+                    costEstimate: p.Type === 'SecureString' ? '0.05' : '0.00',
+                    lastMonthUsage: p.Type,
+                    lastMonthCost: '0.00'
+                });
+            });
+        } catch (e) { console.error('Error fetching SSM parameters:', e.message); }
+
+        // ── EBS Volumes ────────────────────────────────────────────────────────
+        try {
+            const r = await ec2.send(new DescribeVolumesCommand({}));
+            (r.Volumes || []).forEach(vol => {
+                const nameTag = vol.Tags?.find(t => t.Key === 'Name');
+                const costPerGb = vol.VolumeType === 'io1' || vol.VolumeType === 'io2' ? 0.125 : 0.08;
+                const cost = (vol.Size * costPerGb).toFixed(2);
+                resources.push({
+                    id: vol.VolumeId,
+                    name: nameTag?.Value || vol.VolumeId,
+                    type: `EBS ${vol.VolumeType?.toUpperCase()} • ${vol.Size}GB`,
+                    service: 'EBS Volume',
+                    group: 'Storage',
+                    state: vol.State === 'in-use' ? 'running' : vol.State,
+                    launchTime: vol.CreateTime,
+                    publicIp: vol.Attachments?.[0]?.InstanceId || 'Unattached',
+                    costEstimate: cost,
+                    lastMonthUsage: `${vol.Size}GB ${vol.VolumeType}`,
+                    lastMonthCost: cost
+                });
+            });
+        } catch (e) { console.error('Error fetching EBS volumes:', e.message); }
+
+        // ── Elastic IPs ────────────────────────────────────────────────────────
+        try {
+            const r = await ec2.send(new DescribeAddressesCommand({}));
+            (r.Addresses || []).forEach(addr => {
+                resources.push({
+                    id: addr.AllocationId || addr.PublicIp,
+                    name: addr.Tags?.find(t => t.Key === 'Name')?.Value || addr.PublicIp,
+                    type: `Elastic IP • ${addr.Domain} • ${addr.AssociationId ? 'Associated' : 'Unassociated'}`,
+                    service: 'Elastic IP',
+                    group: 'Networking',
+                    state: 'running',
+                    launchTime: null,
+                    publicIp: addr.PublicIp,
+                    costEstimate: addr.AssociationId ? '0.00' : '3.65', // $3.65/mo when idle
+                    lastMonthUsage: addr.AssociationId ? 'In use' : 'IDLE (cost applies)',
+                    lastMonthCost: addr.AssociationId ? '0.00' : '3.65'
+                });
+            });
+        } catch (e) { console.error('Error fetching Elastic IPs:', e.message); }
+
         const hasTransient = resources.some(r =>
             ['creating', 'pending', 'updating', 'deleting'].includes(r.state) || r.isTransient
         );
@@ -1177,44 +1570,107 @@ app.get('/api/resources', async (req, res) => {
 });
 
 // Endpoint to get recent user logins from CloudTrail
+// Queries multiple event types across multiple regions to capture all auth events
 app.get('/api/logins', async (req, res) => {
     try {
         const { cloudtrail } = getAwsClients(req);
-        // Look up ConsoleLogin events for the past 24 hours
         const startTime = new Date();
-        startTime.setDate(startTime.getDate() - 1); // 1 day ago
-        
-        const command = new LookupEventsCommand({
-            LookupAttributes: [
-                { AttributeKey: 'EventName', AttributeValue: 'ConsoleLogin' }
-            ],
-            StartTime: startTime,
-            MaxResults: 50
-        });
-        
-        const response = await cloudtrail.send(command);
-        
+        startTime.setDate(startTime.getDate() - 1); // 24 hours ago
+
+        const region = process.env.AWS_REGION || 'eu-west-2';
+
+        // CloudTrail clients: us-east-1 for global/IAM events, configured region for regional
+        const buildCloudTrailClient = (r) => {
+            if (req.user?.credentials && req.user.credentials.expiration > Date.now()) {
+                const c = req.user.credentials;
+                return new CloudTrailClient({ credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey, sessionToken: c.sessionToken }, region: r });
+            }
+            return new CloudTrailClient({ ...cloudtrail.config, region: r });
+        };
+
+        const ctUsEast1 = buildCloudTrailClient('us-east-1');
+        const ctRegional = buildCloudTrailClient(region);
+
+        // Event types that represent human authentication/login actions
+        const AUTH_EVENTS = [
+            { name: 'ConsoleLogin',              client: ctUsEast1  }, // IAM user / root console login
+            { name: 'ConsoleLogin',              client: ctRegional }, // Regional trail copy
+            { name: 'AssumeRoleWithSAML',        client: ctUsEast1  }, // SAML federation (SSO)
+            { name: 'AssumeRoleWithWebIdentity', client: ctUsEast1  }, // OIDC/web-identity federation
+            { name: 'UserAuthentication',        client: ctUsEast1  }, // IAM Identity Center SSO
+            { name: 'UserAuthentication',        client: ctRegional }, // Regional
+        ];
+
+        // Run all queries in parallel
+        const results = await Promise.allSettled(AUTH_EVENTS.map(({ name, client }) =>
+            client.send(new LookupEventsCommand({
+                LookupAttributes: [{ AttributeKey: 'EventName', AttributeValue: name }],
+                StartTime: startTime,
+                MaxResults: 50
+            }))
+        ));
+
+        // Collect and deduplicate events by EventId
+        const seen = new Set();
         const logins = [];
-        if (response.Events) {
-            response.Events.forEach(event => {
+
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue;
+            const events = result.value.Events || [];
+            for (const event of events) {
+                if (seen.has(event.EventId)) continue;
+                seen.add(event.EventId);
                 try {
-                    const cloudTrailEvent = JSON.parse(event.CloudTrailEvent);
-                    const isSuccess = cloudTrailEvent.responseElements?.ConsoleLogin === 'Success';
-                    
-                    if (isSuccess) {
-                        logins.push({
-                            username: cloudTrailEvent.userIdentity?.userName || 'Root/Unknown',
-                            userType: cloudTrailEvent.userIdentity?.type,
-                            time: event.EventTime,
-                            sourceIp: event.SourceIpAddress
-                        });
+                    const ct = JSON.parse(event.CloudTrailEvent || '{}');
+                    const uid = ct.userIdentity || {};
+                    const eventName = event.EventName || '';
+
+                    // Skip failures for AssumeRole events (only show successful auth)
+                    if (eventName !== 'ConsoleLogin') {
+                        const errorCode = ct.errorCode || ct.errorMessage;
+                        if (errorCode) continue;
                     }
+
+                    // Extract the best human-readable username depending on identity type
+                    let username = uid.userName                                          // IAM user
+                        || uid.sessionContext?.sessionIssuer?.userName                  // AssumedRole / SSO
+                        || uid.principalId?.split(':')[1]                               // principalId fallback
+                        || uid.arn?.split('/').pop()                                    // ARN tail
+                        || 'Unknown';
+                    let userType = uid.type || 'Unknown';
+                    let accountId = uid.accountId || ct.recipientAccountId || '';
+                    let roleName = uid.sessionContext?.sessionIssuer?.arn?.split('/').pop() || '';
+
+                    // For SSO UserAuthentication events, prefer the onBehalfOf/user info
+                    if (eventName === 'UserAuthentication') {
+                        const req2 = ct.requestParameters || {};
+                        username = req2.onBehalfOf || req2.username || username;
+                        userType = 'SSO';
+                    }
+
+                    logins.push({
+                        eventId: event.EventId,
+                        eventName,
+                        username,
+                        userType: userType || 'Unknown',
+                        roleName: roleName || null,
+                        accountId,
+                        time: event.EventTime,
+                        sourceIp: event.SourceIpAddress || ct.sourceIPAddress || 'N/A',
+                        region: ct.awsRegion || region,
+                        success: eventName === 'ConsoleLogin'
+                            ? ct.responseElements?.ConsoleLogin === 'Success'
+                            : !ct.errorCode
+                    });
                 } catch (e) {
-                    console.error("Error parsing event data", e);
+                    console.error('Error parsing CloudTrail event:', e.message);
                 }
-            });
+            }
         }
-        
+
+        // Sort by time descending (newest first)
+        logins.sort((a, b) => new Date(b.time) - new Date(a.time));
+
         res.json({ success: true, count: logins.length, logins });
     } catch (error) {
         console.error('Error fetching CloudTrail logins:', error);

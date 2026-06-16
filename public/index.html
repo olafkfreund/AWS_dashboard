@@ -843,15 +843,41 @@
                         'EKS':              'bg-cyan-900/40 text-cyan-300 border-cyan-700/40',
                         'Lambda':           'bg-violet-900/40 text-violet-300 border-violet-700/40',
                         'CloudFormation':   'bg-yellow-900/40 text-yellow-300 border-yellow-700/40',
+                        'IAM Role':         'bg-pink-900/40 text-pink-300 border-pink-700/40',
+                        'IAM User':         'bg-pink-950/40 text-pink-400 border-pink-700/40',
+                        'RDS':              'bg-indigo-900/40 text-indigo-300 border-indigo-700/40',
+                        'RDS Aurora':       'bg-indigo-950/40 text-indigo-400 border-indigo-700/40',
+                        'DynamoDB':         'bg-sky-900/40 text-sky-300 border-sky-700/40',
+                        'ECR':              'bg-cyan-950/40 text-cyan-400 border-cyan-700/40',
+                        'SNS':              'bg-red-900/40 text-red-300 border-red-700/40',
+                        'SQS':              'bg-orange-950/40 text-orange-400 border-orange-700/40',
+                        'Secrets Manager':  'bg-lime-900/40 text-lime-300 border-lime-700/40',
+                        'Load Balancer':    'bg-emerald-900/40 text-emerald-300 border-emerald-700/40',
+                        'Auto Scaling':     'bg-teal-950/40 text-teal-400 border-teal-700/40',
+                        'CloudWatch':       'bg-orange-900/40 text-orange-300 border-orange-600/40',
+                        'Route53':          'bg-purple-900/40 text-purple-300 border-purple-700/40',
+                        'SSM Parameter':    'bg-lime-950/40 text-lime-400 border-lime-700/40',
+                        'EBS Volume':       'bg-slate-700/40 text-slate-300 border-slate-500/40',
+                        'Elastic IP':       'bg-blue-950/40 text-blue-400 border-blue-700/40',
                     };
                     const GROUP_ICONS = {
-                        'EKS':             'fa-dharmachakra',
-                        'Network':         'fa-network-wired',
-                        'Lambda':          'fa-bolt',
-                        'EC2':             'fa-server',
-                        'S3':              'fa-bucket',
-                        'CloudFormation':  'fa-layer-group',
-                        'Other':           'fa-boxes-stacked',
+                        'EKS':              'fa-dharmachakra',
+                        'Network':          'fa-network-wired',
+                        'Networking':       'fa-sitemap',
+                        'Lambda':           'fa-bolt',
+                        'EC2':              'fa-server',
+                        'Compute':          'fa-microchip',
+                        'S3':               'fa-bucket',
+                        'Storage':          'fa-hard-drive',
+                        'CloudFormation':   'fa-layer-group',
+                        'IAM':              'fa-user-shield',
+                        'Database':         'fa-database',
+                        'Container':        'fa-box',
+                        'Messaging':        'fa-envelope',
+                        'Security':         'fa-lock',
+                        'Monitoring':       'fa-chart-line',
+                        'DNS':              'fa-globe',
+                        'Other':            'fa-boxes-stacked',
                     };
                     const getGroupIcon = g => {
                         for (const [k, v] of Object.entries(GROUP_ICONS)) if (g.startsWith(k)) return v;
@@ -1294,27 +1320,50 @@
                 document.getElementById('logins-loader').classList.add('hidden');
                 const list = document.getElementById('logins-list');
                 list.classList.remove('hidden');
-                
-                if (data.success && data.logins && data.logins.length > 0) {
+                      if (data.success && data.logins && data.logins.length > 0) {
                     window.dashboardState.logins = data.logins;
                     document.getElementById('login-count').innerText = data.count;
-                    
-                    list.innerHTML = data.logins.map(login => `
-                        <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700 card-hover flex justify-between items-center">
-                            <div>
-                                <h3 class="font-bold text-white flex items-center">
-                                    ${login.username}
-                                    <span class="ml-2 text-[10px] bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full">${login.userType}</span>
-                                </h3>
-                                <p class="text-xs text-slate-400 mt-1">${login.sourceIp}</p>
+
+                    const EVENT_BADGE = {
+                        'ConsoleLogin':              'bg-emerald-900/50 text-emerald-300',
+                        'AssumeRoleWithSAML':        'bg-cyan-900/50 text-cyan-300',
+                        'AssumeRoleWithWebIdentity': 'bg-violet-900/50 text-violet-300',
+                        'UserAuthentication':        'bg-blue-900/50 text-blue-300',
+                        'AssumeRole':                'bg-amber-900/50 text-amber-300',
+                    };
+
+                    list.innerHTML = data.logins.map(login => {
+                        const badgeClass = EVENT_BADGE[login.eventName] || 'bg-slate-700/50 text-slate-300';
+                        const successDot = login.success !== false
+                            ? '<span class="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>'
+                            : '<span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>';
+                        const roleRow = login.roleName
+                            ? `<p class="text-[10px] text-slate-500 mt-0.5 font-mono">Role: ${login.roleName}</p>` : '';
+                        const regionBadge = login.region
+                            ? `<span class="text-[9px] font-mono bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded">${login.region}</span>` : '';
+                        return `
+                        <div class="bg-slate-800/50 p-3.5 rounded-lg border border-slate-700/60 card-hover flex justify-between items-start gap-3">
+                            <div class="flex items-start gap-2.5 min-w-0">
+                                ${successDot}
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap mb-0.5">
+                                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${badgeClass}">${login.eventName}</span>
+                                        <span class="text-[9px] font-mono bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded">${login.userType || 'Unknown'}</span>
+                                        ${regionBadge}
+                                    </div>
+                                    <h4 class="font-semibold text-sm text-white truncate">${login.username}</h4>
+                                    ${roleRow}
+                                    <p class="text-[10px] text-slate-500 mt-0.5">${login.sourceIp}</p>
+                                </div>
                             </div>
-                            <div class="text-right">
-                                <p class="text-sm text-slate-300">${formatDate(login.time)}</p>
+                            <div class="text-right shrink-0">
+                                <p class="text-xs text-slate-300">${formatDate(login.time)}</p>
+                                ${login.accountId ? `<p class="text-[9px] text-slate-500 mt-0.5 font-mono">${login.accountId}</p>` : ''}
                             </div>
-                        </div>
-                    `).join('');
+                        </div>`;
+                    }).join('');
                 } else {
-                    list.innerHTML = `<p class="text-slate-400 italic">No recent logins found in the last 24h.</p>`;
+                    list.innerHTML = `<p class="text-slate-400 italic">No recent auth events found in the last 24h. Ensure CloudTrail is enabled in your AWS account.</p>`;
                 }
             } catch (err) {
                 console.error(err);
