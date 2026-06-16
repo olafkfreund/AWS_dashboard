@@ -2502,6 +2502,15 @@ Use this information to answer user questions about tasks, pull requests, issues
                 answer = await session.prompt(promptText);
                 handled = true;
               }
+            } else if (window.ai.assistant && typeof window.ai.assistant.create === 'function') {
+              const capabilities = await window.ai.assistant.capabilities();
+              if (capabilities && capabilities.available !== 'no') {
+                const session = await window.ai.assistant.create({
+                  systemPrompt: systemMessage
+                });
+                answer = await session.prompt(promptText);
+                handled = true;
+              }
             } else if (typeof window.ai.createTextSession === 'function') {
               const session = await window.ai.createTextSession({
                 systemPrompt: systemMessage
@@ -2555,44 +2564,6 @@ Use this information to answer user questions about tasks, pull requests, issues
         }
       } catch (err) {
         console.error(err);
-        
-        // 3. Last resort fallback to cloud-hosted GitHub Models if PAT exists
-        try {
-          const copilotToken = localStorage.getItem('gh_copilot_pat') || state.token;
-          if (copilotToken) {
-            updateCopilotStatus('loading', 'Falling back to cloud models...');
-            const systemMessage = getCopilotSystemMessage();
-            const res = await fetch('https://models.github.ai/inference/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${copilotToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [
-                  { role: 'system', content: systemMessage },
-                  { role: 'user', content: promptText }
-                ],
-                temperature: 0.2
-              })
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              const answer = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : 'No response content';
-              const placeholder = document.getElementById(responseId);
-              if (placeholder) {
-                placeholder.innerHTML = parseMarkdown(answer);
-              }
-              updateCopilotStatus('connected', 'Connected (GitHub Models Fallback)');
-              return;
-            }
-          }
-        } catch (fallbackErr) {
-          console.error("Cloud fallback failed:", fallbackErr);
-        }
-
         const placeholder = document.getElementById(responseId);
         if (placeholder) {
           placeholder.innerHTML = `<span style="color: var(--red);">Local LLM Error: ${escapeHtml(err.message)}</span>`;

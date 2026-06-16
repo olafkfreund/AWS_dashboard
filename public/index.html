@@ -1390,6 +1390,15 @@ Please answer Olaf's questions about these resources and login events, or genera
                                     answer = await session.prompt(text);
                                     handled = true;
                                 }
+                            } else if (window.ai.assistant && typeof window.ai.assistant.create === 'function') {
+                                const capabilities = await window.ai.assistant.capabilities();
+                                if (capabilities && capabilities.available !== 'no') {
+                                    const session = await window.ai.assistant.create({
+                                        systemPrompt: systemMessage
+                                    });
+                                    answer = await session.prompt(text);
+                                    handled = true;
+                                }
                             } else if (typeof window.ai.createTextSession === 'function') {
                                 const session = await window.ai.createTextSession({
                                     systemPrompt: systemMessage
@@ -1433,51 +1442,7 @@ Please answer Olaf's questions about these resources and login events, or genera
                                 throw new Error('Ollama returned status ' + res.status);
                             }
                         } catch (ollamaErr) {
-                            console.warn("Local Ollama client fallback failed, checking for GitHub Models fallback...", ollamaErr);
-                            
-                            // 3. Fall back to cloud-hosted GitHub Models if PAT exists
-                            let token = localStorage.getItem('gh_pat');
-                            if (!token) {
-                                try {
-                                    const tokenRes = await fetch('/api/config/tokens');
-                                    const tokenData = await tokenRes.json();
-                                    if (tokenData.github) {
-                                        token = tokenData.github;
-                                        localStorage.setItem('gh_pat', token);
-                                    }
-                                } catch (e) {
-                                    console.error("Auto-fetch GitHub token failed", e);
-                                }
-                            }
-                            
-                            if (token) {
-                                const res = await fetch('https://models.github.ai/inference/chat/completions', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        model: 'gpt-4o',
-                                        messages: [
-                                            { role: 'system', content: systemMessage },
-                                            { role: 'user', content: text }
-                                        ],
-                                        temperature: 0.2
-                                    })
-                                });
-                                
-                                if (res.status === 403) {
-                                    throw new Error('Access denied. Please check if your GitHub Token has Copilot access or permissions for GitHub Models in Settings.');
-                                } else if (!res.ok) {
-                                    throw new Error('API returned status ' + res.status);
-                                }
-                                
-                                const data = await res.json();
-                                answer = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : 'No response content';
-                            } else {
-                                throw new Error(`Local LLM client not found. (Ollama connection error: ${ollamaErr.message}). Please ensure your local Ollama server is running on ${url} or your browser supports window.ai.`);
-                            }
+                            throw new Error(`Local LLM client not found. (Ollama connection error: ${ollamaErr.message}). Please ensure your local Ollama server is running on ${url} with the model '${model}' installed, or that your browser supports native window.ai.`);
                         }
                     }
                 } else {
