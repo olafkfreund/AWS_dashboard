@@ -127,7 +127,8 @@
             assistantTelemetry.github.prs = JSON.parse(localStorage.getItem('gh_active_prs') || '[]');
             assistantTelemetry.github.issues = JSON.parse(localStorage.getItem('gh_active_issues') || '[]');
             
-            assistantTelemetry.gitlab.repos = JSON.parse(localStorage.getItem('gl_active_repos') || '[]');
+            const rawRepos = JSON.parse(localStorage.getItem('gl_active_repos') || '[]');
+            assistantTelemetry.gitlab.repos = Array.isArray(rawRepos) ? rawRepos : [];
             assistantTelemetry.gitlab.mrs = JSON.parse(localStorage.getItem('gl_active_mrs') || '[]');
             assistantTelemetry.gitlab.issues = JSON.parse(localStorage.getItem('gl_active_issues') || '[]');
 
@@ -230,13 +231,14 @@
                     // Fetch open Issues (top 10)
                     const issues = await fetch(`${glUrl}/api/v4/issues?state=opened&scope=created_by_me&per_page=10`, { headers }).then(r => r.json()).catch(() => []);
                     
-                    assistantTelemetry.gitlab.repos = projects;
-                    assistantTelemetry.gitlab.mrs = mrs;
-                    assistantTelemetry.gitlab.issues = issues;
-                    
-                    localStorage.setItem('gl_active_repos', JSON.stringify(projects));
-                    localStorage.setItem('gl_active_mrs', JSON.stringify(mrs));
-                    localStorage.setItem('gl_active_issues', JSON.stringify(issues));
+                    // Guard: API may return an error object instead of an array
+                    assistantTelemetry.gitlab.repos = Array.isArray(projects) ? projects : [];
+                    assistantTelemetry.gitlab.mrs = Array.isArray(mrs) ? mrs : [];
+                    assistantTelemetry.gitlab.issues = Array.isArray(issues) ? issues : [];
+
+                    localStorage.setItem('gl_active_repos', JSON.stringify(assistantTelemetry.gitlab.repos));
+                    localStorage.setItem('gl_active_mrs', JSON.stringify(assistantTelemetry.gitlab.mrs));
+                    localStorage.setItem('gl_active_issues', JSON.stringify(assistantTelemetry.gitlab.issues));
                 }
             } catch (e) {
                 console.warn("Failed background-fetching GitLab telemetry:", e);
@@ -270,9 +272,9 @@
         const ghPrs = assistantTelemetry.github.prs || [];
         const ghIssues = assistantTelemetry.github.issues || [];
         
-        const glRepos = assistantTelemetry.gitlab.repos || [];
-        const glMrs = assistantTelemetry.gitlab.mrs || [];
-        const glIssues = assistantTelemetry.gitlab.issues || [];
+        const glRepos  = Array.isArray(assistantTelemetry.gitlab.repos)   ? assistantTelemetry.gitlab.repos   : [];
+        const glMrs    = Array.isArray(assistantTelemetry.gitlab.mrs)     ? assistantTelemetry.gitlab.mrs     : [];
+        const glIssues = Array.isArray(assistantTelemetry.gitlab.issues)  ? assistantTelemetry.gitlab.issues  : [];
 
         const k8sNodes = assistantTelemetry.k8s.nodes || [];
         const k8sDeps = assistantTelemetry.k8s.deployments || [];
