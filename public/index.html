@@ -132,6 +132,12 @@
             0%   { transform: translateX(-100%); }
             100% { transform: translateX(200%); }
         }
+        .card-text-clip {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
         .loader {
             border: 3px solid rgba(255, 255, 255, 0.1);
             border-top: 3px solid #FF9900;
@@ -937,28 +943,28 @@
                                 ? `<i class="fa-solid fa-gear animate-spin text-amber-400 text-xs shrink-0"></i>` : '';
 
                             return `
-                                <div class="${cardBg} p-3.5 rounded-lg border ${cardBorder} card-hover">
-                                    <div class="flex justify-between items-start gap-2">
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${badgeColor}">${inst.service}</span>
+                                <div class="${cardBg} p-3.5 rounded-lg border ${cardBorder} card-hover overflow-hidden">
+                                    <div class="flex items-start gap-2 min-w-0">
+                                        <div class="flex-1 min-w-0 overflow-hidden">
+                                            <div class="flex items-center gap-1.5 flex-wrap mb-1">
+                                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} shrink-0">${inst.service}</span>
                                                 ${regionBadge}
                                                 ${cfnSpinner}
-                                                <h4 class="font-semibold text-sm text-white truncate">${inst.name}</h4>
                                             </div>
-                                            <p class="text-[10px] text-slate-500 font-mono truncate">${inst.id.split('/').pop()}</p>
+                                            <h4 class="font-semibold text-sm text-white leading-tight card-text-clip">${inst.name}</h4>
+                                            <p class="text-[10px] text-slate-500 font-mono mt-0.5 card-text-clip">${inst.id.split('/').pop()}</p>
                                             ${extraLinks ? `<div class="mt-1">${extraLinks}</div>` : ''}
                                         </div>
-                                        <div class="text-right shrink-0">
-                                            <div class="text-[9px] text-slate-500 uppercase tracking-wider">Cost/mo</div>
-                                            <div class="${costColor} font-bold text-sm">$${inst.costEstimate || '0.00'}</div>
+                                        <div class="text-right shrink-0 pl-2 border-l border-slate-700/40 ml-1">
+                                            <div class="text-[9px] text-slate-500 uppercase tracking-wider whitespace-nowrap">Cost/mo</div>
+                                            <div class="${costColor} font-bold text-sm whitespace-nowrap">$${inst.costEstimate || '0.00'}</div>
                                         </div>
                                     </div>
-                                    <div class="mt-2 pt-2 border-t border-slate-700/40 flex items-center gap-2 text-xs text-slate-400">
+                                    <div class="mt-2 pt-2 border-t border-slate-700/40 flex items-center gap-2 text-xs min-w-0">
                                         <span class="w-1.5 h-1.5 rounded-full ${dotColor} shrink-0"></span>
-                                        <span class="truncate ${isCFN && isCreating ? 'text-amber-400/80' : ''}">${statusText}</span>
+                                        <span class="card-text-clip flex-1 ${isCFN && isCreating ? 'text-amber-400/80' : 'text-slate-400'}">${statusText}</span>
                                     </div>
-                                    <p class="text-[10px] text-slate-500 mt-1 truncate">${inst.type}</p>
+                                    <p class="text-[10px] text-slate-500 mt-1 card-text-clip">${inst.type}</p>
                                     ${cfnProgressBar}
                                 </div>`;
                         }).join('');
