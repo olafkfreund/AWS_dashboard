@@ -948,6 +948,14 @@
                             serviceBadgeColor = 'bg-rose-950/40 text-rose-400 border-rose-700/40';
                         } else if (inst.service === 'EKS') {
                             serviceBadgeColor = 'bg-cyan-900/40 text-cyan-300 border-cyan-700/40';
+                        } else if (inst.service === 'K8s Node') {
+                            serviceBadgeColor = 'bg-indigo-900/40 text-indigo-300 border-indigo-700/40';
+                        } else if (inst.service === 'K8s Deployment') {
+                            serviceBadgeColor = 'bg-violet-900/40 text-violet-300 border-violet-700/40';
+                        } else if (inst.service === 'K8s Service') {
+                            serviceBadgeColor = 'bg-teal-900/40 text-teal-300 border-teal-700/40';
+                        } else if (inst.service === 'K8s Pod') {
+                            serviceBadgeColor = 'bg-sky-900/40 text-sky-300 border-sky-700/40';
                         }
 
                         const state = inst.state || 'running';
@@ -968,16 +976,24 @@
                             ? `${state.toUpperCase()} • ${inst.publicIp}`
                             : inst.publicIp;
 
-                        // For EKS, show node group details on a second line
-                        const eksExtra = inst.service === 'EKS' ? `
-                            <p class="text-[10px] text-cyan-400/70 mt-0.5 font-mono truncate" title="${inst.type}">${inst.type}</p>
-                            <button onclick="showView('k8s')" class="mt-2 text-[10px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-semibold">View in Kubernetes tab →</button>
+                        // For EKS/K8s, show a link to the Kubernetes tab
+                        const isK8s = inst.service && inst.service.startsWith('K8s');
+                        const isEKS = inst.service === 'EKS';
+
+                        const eksExtra = (isEKS || isK8s) ? `
+                            <button onclick="showView('k8s')" class="mt-2 text-[10px] ${isEKS ? 'text-cyan-400 hover:text-cyan-300' : 'text-indigo-400 hover:text-indigo-300'} underline underline-offset-2 font-semibold">View in Kubernetes tab →</button>
                         ` : '';
 
-                        const typeLabel = inst.service === 'EKS' ? 'EKS Cluster' : inst.type;
+                        const typeLabel = isEKS ? 'EKS Cluster' : inst.type;
+                        const cardBorder = isEKS
+                            ? 'border-cyan-800/50'
+                            : isK8s
+                            ? 'border-indigo-800/40'
+                            : 'border-slate-700';
+
 
                         return `
-                            <div class="bg-slate-800/50 p-4 rounded-lg border ${inst.service === 'EKS' ? 'border-cyan-800/50' : 'border-slate-700'} card-hover">
+                            <div class="bg-slate-800/50 p-4 rounded-lg border ${cardBorder} card-hover">
                                 <div class="flex justify-between items-start">
                                     <div class="flex-1 min-w-0 mr-3">
                                         <div class="flex items-center gap-2 mb-1 flex-wrap">
