@@ -1178,13 +1178,14 @@ app.get('/api/resources', async (req, res) => {
                     // Fetch node groups for cost
                     let nodeGroupCostTotal = 0;
                     let nodeGroupSummary = 'No node groups';
+                    let validNGs = []; // hoisted so resources.push can reference it
                     try {
                         const ngListRes = await eks.send(new ListNodegroupsCommand({ clusterName }));
                         const ngNames = ngListRes.nodegroups || [];
                         const ngDetails = await Promise.all(ngNames.map(ng =>
                             eks.send(new DescribeNodegroupCommand({ clusterName, nodegroupName: ng })).catch(() => null)
                         ));
-                        const validNGs = ngDetails.filter(Boolean).map(r => r.nodegroup);
+                        validNGs = ngDetails.filter(Boolean).map(r => r.nodegroup);
                         nodeGroupCostTotal = validNGs.reduce((sum, ng) => {
                             const desired = ng.scalingConfig?.desiredSize || 0;
                             const cost = getEc2CostEstimate(ng.instanceTypes?.[0] || 't3.medium');
