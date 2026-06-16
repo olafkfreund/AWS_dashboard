@@ -4,6 +4,7 @@ site_description: Comprehensive developer documentation for the AWS Status Dashb
 nav:
   - Welcome: index.md
   - Architecture & WebMCP: architecture.md
+  - WebMCP & Local LLMs: webmcp_and_local_llms.md
   - NixOS & Development: nixos.md
   - Deployment & Docker: deployment.md
 
