@@ -94,3 +94,15 @@ eks-delete:
 # Show EKS cluster status
 eks-status:
     eksctl get cluster --name sarc-portal-test --region eu-west-2
+
+# Create minimal EKS cluster in the SYNECHRON account (~15 min)
+eks-synechron-create:
+    eksctl create cluster -f infra/eks/cluster-synechron.yaml --profile Synechron
+
+# Delete the Synechron EKS cluster and all its resources
+eks-synechron-delete:
+    eksctl delete cluster -f infra/eks/cluster-synechron.yaml --profile Synechron
+
+# Show Synechron EKS cluster status
+eks-synechron-status:
+    eksctl get cluster --name synechron-portal-test --region eu-west-2 --profile Synechron
