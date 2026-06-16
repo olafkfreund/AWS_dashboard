@@ -1089,8 +1089,15 @@
             try {
                 const res = await fetch('/api/resources');
                 if (res.status === 401) {
-                    document.getElementById('resources-loader').innerHTML =
-                        `<p class="text-amber-400 text-sm">Not authenticated. Click <strong>AWS SSO Login</strong> above to load resources.</p>`;
+                    document.getElementById('resources-loader').innerHTML = `
+                        <div class="flex flex-col items-center gap-3 py-10">
+                            <i class="fa-solid fa-lock text-3xl text-amber-400"></i>
+                            <p class="text-white font-semibold">Session Expired</p>
+                            <p class="text-slate-400 text-sm text-center">Your session has expired or the server was restarted.<br>Please log in again to load AWS resources.</p>
+                            <a href="/login.html" class="mt-2 px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors">
+                                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>Log In Again
+                            </a>
+                        </div>`;
                     return;
                 }
                 const data = await res.json();
@@ -2022,8 +2029,15 @@
                 if (res.status === 401 || !contentType.includes('application/json')) {
                     if (refreshIcon) refreshIcon.classList.remove('animate-spin');
                     loader.classList.add('hidden');
-                    document.getElementById('k8s-error-msg').innerText = 'Not authenticated. Use the AWS SSO Login button.';
-                    errorState.classList.remove('hidden');
+                    content.innerHTML = `
+                        <div class="flex flex-col items-center gap-3 py-16">
+                            <i class="fa-solid fa-lock text-4xl text-amber-400"></i>
+                            <p class="text-white font-semibold text-lg">Session Expired</p>
+                            <p class="text-slate-400 text-sm text-center">Your session has expired or the server was restarted.<br>Please log in again to view EKS clusters.</p>
+                            <a href="/login.html" class="mt-2 px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors">
+                                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>Log In Again
+                            </a>
+                        </div>`;
                     return;
                 }
 

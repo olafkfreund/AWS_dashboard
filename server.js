@@ -71,8 +71,38 @@ const port = process.env.PORT || 8889;
 app.use(cors());
 app.use(express.json());
 
-// Session store in-memory
-const sessions = new Map();
+// ── Session store — file-backed so restarts don't log users out ──────────────
+const SESSIONS_FILE = path.join(__dirname, '.sessions.json');
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+let sessions = new Map();
+
+function loadSessions() {
+    try {
+        if (fs.existsSync(SESSIONS_FILE)) {
+            const raw = fs.readFileSync(SESSIONS_FILE, 'utf8');
+            const obj = JSON.parse(raw);
+            const now = Date.now();
+            sessions = new Map(
+                Object.entries(obj).filter(([, v]) => (now - v.createdAt) < SESSION_TTL_MS)
+            );
+            console.log(`Loaded ${sessions.size} active session(s) from disk.`);
+        }
+    } catch (e) { console.error('Failed to load sessions:', e.message); }
+}
+
+function saveSessions() {
+    try {
+        const now = Date.now();
+        const obj = {};
+        sessions.forEach((v, k) => {
+            if ((now - v.createdAt) < SESSION_TTL_MS) obj[k] = v;
+        });
+        fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf8');
+    } catch (e) { console.error('Failed to save sessions:', e.message); }
+}
+
+loadSessions();
 
 // GitHub OAuth configuration
 let githubClientId = process.env.GITHUB_OAUTH_CLIENT_ID || null;
@@ -227,7 +257,8 @@ app.get('/api/auth/github/callback', async (req, res) => {
             createdAt: Date.now()
         });
         
-        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax`);
+        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+        saveSessions();
         res.redirect('/');
         
     } catch (err) {
@@ -305,7 +336,8 @@ app.get('/api/auth/gitlab/callback', async (req, res) => {
             createdAt: Date.now()
         });
         
-        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax`);
+        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+        saveSessions();
         res.redirect('/');
         
     } catch (err) {
@@ -346,7 +378,8 @@ app.post('/api/auth/aws-sso-verify', (req, res) => {
             });
             
             console.log('AWS SSO Verification Succeeded for:', username);
-            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax`);
+            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+        saveSessions();
             res.json({ success: true, username });
         } catch (e) {
             console.error('Failed to parse AWS STS output:', e);
@@ -524,7 +557,8 @@ app.post('/api/auth/sso/poll', async (req, res) => {
 
             console.log(`AWS SSO Direct Verification Succeeded for ${username}`);
             
-            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax`);
+            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+        saveSessions();
             res.json({ success: true, status: 'approved', username });
         } catch (credError) {
             console.error("Failed to fetch AWS SSO role credentials:", credError);
