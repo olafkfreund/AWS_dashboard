@@ -1,0 +1,18 @@
+# CODEOWNERS Configuration for AWS Status Dashboard
+
+# Default owners for all files
+*       @olafkfreund @Olaf-KrasickiFreund_syne
+
+# Backend and core application logic owners
+/server.js          @olafkfreund
+/package.json       @olafkfreund
+/package-lock.json  @olafkfreund
+
+# NixOS Flake & Devenv environments owners
+/flake.nix          @Olaf-KrasickiFreund_syne
+/devenv.nix         @Olaf-KrasickiFreund_syne
+/devenv.yaml        @Olaf-KrasickiFreund_syne
+
+# Containerization and CI configs owners
+/Dockerfile         @Olaf-KrasickiFreund_syne
+/.github/           @Olaf-KrasickiFreund_syne

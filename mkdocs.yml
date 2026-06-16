@@ -1,0 +1,11 @@
+site_name: AWS Status Dashboard TechDocs
+site_description: Comprehensive developer documentation for the AWS Status Dashboard, WebMCP tools, and NixOS/Docker setups.
+
+nav:
+  - Welcome: index.md
+  - Architecture & WebMCP: architecture.md
+  - NixOS & Development: nixos.md
+  - Deployment & Docker: deployment.md
+
+theme:
+  name: 'material' # Backstage TechDocs uses a customized material theme by default

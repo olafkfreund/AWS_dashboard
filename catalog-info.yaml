@@ -1,0 +1,25 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: aws-status-dashboard
+  title: AWS Status Dashboard
+  description: A modern, glassmorphic static dashboard for monitoring AWS EC2 resources and CloudTrail logins, featuring WebMCP support.
+  annotations:
+    # Backstage TechDocs annotation (pointing to the root directory for mkdocs.yml)
+    backstage.io/techdocs-ref: dir:.
+    
+    # GitHub Integration annotations
+    github.com/project-slug: Olaf-KrasickiFreund_syne/AWS_dashboard
+    backstage.io/source-location: url:https://github.com/Olaf-KrasickiFreund_syne/AWS_dashboard
+  tags:
+    - aws
+    - dashboard
+    - webmcp
+    - nixos
+    - devshell
+    - docker
+spec:
+  type: website
+  lifecycle: active
+  owner: user:olafkfreund
+  system: synechron-arc
