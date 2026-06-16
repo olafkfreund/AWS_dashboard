@@ -53,3 +53,35 @@ When **Demo Mode** is activated:
 - Calls to `/api/resources` and `/api/logins` are intercepted and serve realistic mock telemetry.
 - An orange **"GitHub Pages Demo"** badge appears next to the title.
 - The built-in assistant chatbot falls back to local simulated responses unless a GitHub Personal Access Token is saved in the **Settings** tab to access the live GitHub Models API.
+
+---
+
+## MCP Server Integration
+
+In addition to client-side WebMCP, this repository hosts a stdio-based **Model Context Protocol (MCP) Server** (`mcp_server.js`). This enables desktop or CLI-based LLM clients (such as Claude Desktop, Cursor, or developer agents) to query your AWS environment directly.
+
+### Exposed Tools
+
+1. **`list_ec2_instances`**: Returns active, running EC2 instances with Name, ID, instance type, and IP address.
+2. **`list_console_logins`**: Returns successful CloudTrail console logins from the past 24 hours.
+3. **`trigger_sso_login`**: Refreshes expired AWS SSO sessions by running `aws sso login --profile Synechron` locally.
+
+### Claude Desktop Integration Example
+
+To configure the server in Claude Desktop, add the following to `~/.config/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "aws-dashboard": {
+      "command": "node",
+      "args": ["/home/olafkfreund/Source/Calitii/Synechron-ARC/AWS-dashboard/mcp_server.js"],
+      "env": {
+        "AWS_PROFILE": "Synechron",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}
+```
+

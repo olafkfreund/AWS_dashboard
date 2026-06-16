@@ -23,6 +23,7 @@
   # Custom scripts helper commands
   scripts = {
     start-backend.exec = "node server.js";
+    start-mcp.exec = "node mcp_server.js";
   };
 
   # Background process running via process-compose (triggered by `devenv up`)
