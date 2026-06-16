@@ -922,4 +922,9 @@ app.get('/api/spending', async (req, res) => {
 
 app.listen(port, () => {
     console.log(`AWS Dashboard backend running at http://localhost:${port}`);
+    try {
+        fs.writeFileSync(path.join(__dirname, '.server.pid'), process.pid.toString());
+    } catch (e) {
+        console.error("Failed to write .server.pid:", e);
+    }
 });
