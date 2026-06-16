@@ -293,62 +293,95 @@
             </header>
 
             <!-- Cost & Budget Monitor Panel -->
-            <div class="glass-panel p-6 mb-8 card-hover">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-semibold flex items-center text-card-foreground">
-                        <i class="fa-solid fa-chart-line mr-3 text-primary"></i> Cost & Budget Monitor
+            <div class="glass-panel p-6 mb-8">
+                <div class="flex justify-between items-center mb-5">
+                    <h2 class="text-xl font-semibold flex items-center text-card-foreground">
+                        <i class="fa-solid fa-chart-line mr-3 text-primary"></i> Cost &amp; Budget Monitor
                     </h2>
-                    <span id="cost-badge" class="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs font-bold hidden">Demo Data</span>
+                    <div class="flex items-center gap-3">
+                        <span id="cost-badge" class="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs font-bold hidden">Demo Data</span>
+                        <span id="cost-last-updated" class="text-[10px] text-slate-500"></span>
+                        <button onclick="fetchSpending()" class="p-1.5 rounded-lg bg-secondary/60 hover:bg-secondary border border-border text-muted-foreground hover:text-white transition-colors" title="Refresh cost data">
+                            <i class="fa-solid fa-arrows-rotate text-xs" id="cost-refresh-icon"></i>
+                        </button>
+                    </div>
                 </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                    <!-- Cost Box -->
+
+                <!-- Top KPI row -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+                    <!-- MTD Actual (Cost Explorer) -->
                     <div class="bg-secondary/40 p-4 rounded-lg border border-border/50">
-                        <div class="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">MTD Spend (Month-to-Date)</div>
-                        <div class="text-3xl font-extrabold flex items-baseline">
-                            <span class="text-xs font-medium text-muted-foreground mr-1" id="cost-currency">USD</span>
-                            <span id="cost-amount">0.00</span>
+                        <div class="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">MTD Actual</div>
+                        <div class="text-2xl font-extrabold flex items-baseline gap-1">
+                            <span class="text-xs font-medium text-muted-foreground" id="cost-currency">USD</span>
+                            <span id="cost-amount">—</span>
                         </div>
-                        <div class="text-[10px] text-muted-foreground mt-2 flex items-center">
-                            <i class="fa-solid fa-circle-info mr-1"></i> Cost explorer metrics updated daily
-                        </div>
-                    </div>
-                    
-                    <!-- Budget Box -->
-                    <div class="col-span-2 bg-secondary/40 p-4 rounded-lg border border-border/50" id="budget-container">
-                        <div class="flex justify-between items-center mb-2">
-                            <div>
-                                <div class="text-xs text-muted-foreground uppercase font-bold tracking-wider" id="budget-name">Monthly AWS Budget</div>
-                                <div class="text-xs text-muted-foreground mt-0.5">
-                                    Limit: <span id="budget-limit">0.00</span> <span class="budget-currency">USD</span>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <div class="text-sm font-extrabold" id="budget-percent">0%</div>
-                                <div class="text-[10px] text-muted-foreground">spent</div>
-                            </div>
-                        </div>
-                        
-                        <!-- Progress Bar -->
-                        <div class="w-full bg-secondary rounded-full h-2.5 overflow-hidden">
-                            <div id="budget-progress-bar" class="bg-primary h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
-                        </div>
-                        
-                        <div class="flex justify-between items-center mt-2 text-[10px] text-muted-foreground">
-                            <span>Spent: <strong id="budget-spent">0.00</strong> <span class="budget-currency">USD</span></span>
-                            <span>Remaining: <strong id="budget-remaining">0.00</strong> <span class="budget-currency">USD</span></span>
+                        <div class="text-[9px] text-slate-500 mt-1 flex items-center gap-1">
+                            <i class="fa-solid fa-clock"></i> Cost Explorer · updated daily by AWS
                         </div>
                     </div>
-                    
-                    <!-- No Budget State -->
-                    <div class="col-span-2 hidden p-4 text-center text-muted-foreground" id="no-budget-container">
-                        <i class="fa-solid fa-scale-balanced text-2xl mb-2 text-muted-foreground/40"></i>
-                        <div class="text-sm">No active budgets found in this AWS account.</div>
+
+                    <!-- Estimated Monthly (from resource cards) -->
+                    <div class="bg-secondary/40 p-4 rounded-lg border border-border/50">
+                        <div class="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Est. Monthly</div>
+                        <div class="text-2xl font-extrabold flex items-baseline gap-1">
+                            <span class="text-xs font-medium text-muted-foreground">USD</span>
+                            <span id="cost-estimated">—</span>
+                        </div>
+                        <div class="text-[9px] text-slate-500 mt-1 flex items-center gap-1">
+                            <i class="fa-solid fa-calculator"></i> Based on visible resources · real-time
+                        </div>
                     </div>
+
+                    <!-- Budget Limit -->
+                    <div class="bg-secondary/40 p-4 rounded-lg border border-border/50" id="budget-limit-tile">
+                        <div class="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Budget Limit</div>
+                        <div class="text-2xl font-extrabold flex items-baseline gap-1">
+                            <span class="text-xs font-medium text-muted-foreground budget-currency">USD</span>
+                            <span id="budget-limit">—</span>
+                        </div>
+                        <div class="text-[9px] text-slate-500 mt-1" id="budget-name">Monthly AWS Budget</div>
+                    </div>
+
+                    <!-- Remaining -->
+                    <div class="bg-secondary/40 p-4 rounded-lg border border-border/50">
+                        <div class="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Remaining</div>
+                        <div class="text-2xl font-extrabold flex items-baseline gap-1" id="budget-remaining-tile">
+                            <span class="text-xs font-medium text-muted-foreground budget-currency">USD</span>
+                            <span id="budget-remaining">—</span>
+                        </div>
+                        <div class="text-[9px] text-slate-500 mt-1">Spent: <span id="budget-spent">—</span> <span class="budget-currency">USD</span></div>
+                    </div>
+                </div>
+
+                <!-- Budget progress bar -->
+                <div id="budget-container">
+                    <div class="flex justify-between text-[10px] text-muted-foreground mb-1">
+                        <span id="budget-name-bar">Budget</span>
+                        <span id="budget-percent">0%</span>
+                    </div>
+                    <div class="w-full bg-secondary rounded-full h-2.5 overflow-hidden mb-1">
+                        <div id="budget-progress-bar" class="bg-primary h-2.5 rounded-full transition-all duration-700" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <!-- Per-service cost breakdown -->
+                <div class="mt-5">
+                    <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-2">Estimated Cost by Service</div>
+                    <div id="cost-service-breakdown" class="space-y-1.5"></div>
+                </div>
+
+                <!-- No budget state -->
+                <div class="hidden p-3 text-center text-muted-foreground text-sm" id="no-budget-container">
+                    <i class="fa-solid fa-scale-balanced mr-2 text-muted-foreground/40"></i>No active budgets found in this AWS account.
+                </div>
+
+                <!-- Lag explanation -->
+                <div class="mt-4 p-3 rounded-lg bg-amber-950/20 border border-amber-800/20 text-[10px] text-amber-400/80 flex gap-2 items-start">
+                    <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i>
+                    <span><strong>Why does MTD Actual lag?</strong> AWS Cost Explorer ingests billing data once per day (usually by 08:00 UTC). Resources created today (like your new EKS cluster) will appear in the <em>Est. Monthly</em> column immediately but won't show in MTD Actual until tomorrow's update.</span>
                 </div>
             </div>
-
-
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 <!-- EC2 Resources Panel -->
@@ -708,64 +741,115 @@
         }
 
         async function fetchSpending() {
+            const icon = document.getElementById('cost-refresh-icon');
+            if (icon) icon.classList.add('animate-spin');
             try {
                 const res = await fetch('/api/spending');
                 if (res.status === 401) {
-                    // Not authenticated - the SSO Login button is at the top of the page
+                    if (icon) icon.classList.remove('animate-spin');
                     return;
                 }
                 const data = await res.json();
-                
+
                 if (data.success) {
+                    // ── MTD Actual from Cost Explorer ─────────────────────────
                     const cost = data.cost;
-                    document.getElementById('cost-amount').innerText = cost.amount;
-                    document.getElementById('cost-currency').innerText = cost.currency;
-                    
+                    const amountEl = document.getElementById('cost-amount');
+                    if (amountEl) amountEl.innerText = cost.amount;
+                    const currencyEl = document.getElementById('cost-currency');
+                    if (currencyEl) currencyEl.innerText = cost.currency;
+
                     const costBadge = document.getElementById('cost-badge');
-                    if (cost.isMock) {
-                        costBadge.classList.remove('hidden');
-                        costBadge.innerText = 'Demo Cost Data';
-                    } else {
-                        costBadge.classList.add('hidden');
+                    if (costBadge) {
+                        if (cost.isMock) { costBadge.classList.remove('hidden'); costBadge.innerText = 'Demo Cost Data'; }
+                        else costBadge.classList.add('hidden');
                     }
-                    
-                    // 2. Render Budget
+
+                    // ── Estimated Monthly from resource cards ─────────────────
+                    const resources = (window.dashboardState && window.dashboardState.resources) || [];
+                    const svcTotals = {};
+                    let grandTotal = 0;
+                    resources.forEach(r => {
+                        const val = parseFloat(r.costEstimate || r.lastMonthCost || 0);
+                        if (!val) return;
+                        const svc = r.service || 'Other';
+                        svcTotals[svc] = (svcTotals[svc] || 0) + val;
+                        grandTotal += val;
+                    });
+                    const estEl = document.getElementById('cost-estimated');
+                    if (estEl) estEl.innerText = grandTotal > 0 ? grandTotal.toFixed(2) : '—';
+
+                    // ── Per-service breakdown bars ────────────────────────────
+                    const breakdown = document.getElementById('cost-service-breakdown');
+                    if (breakdown) {
+                        const SERVICE_COLORS_MAP = {
+                            'EKS': 'bg-cyan-500', 'EC2': 'bg-emerald-500', 'S3': 'bg-blue-500',
+                            'Lambda': 'bg-violet-500', 'RDS': 'bg-amber-500', 'CloudFormation': 'bg-slate-500',
+                            'IAM Role': 'bg-rose-500', 'NAT Gateway': 'bg-orange-500',
+                        };
+                        const sorted = Object.entries(svcTotals).sort((a,b) => b[1]-a[1]);
+                        if (sorted.length === 0) {
+                            breakdown.innerHTML = '<p class="text-[10px] text-slate-600 italic">No cost estimates yet — resource data loading…</p>';
+                        } else {
+                            breakdown.innerHTML = sorted.map(([svc, total]) => {
+                                const pct = grandTotal > 0 ? ((total / grandTotal) * 100).toFixed(1) : 0;
+                                const barColor = SERVICE_COLORS_MAP[svc] || 'bg-slate-500';
+                                return `<div class="flex items-center gap-2">
+                                    <span class="text-[10px] text-slate-400 w-28 shrink-0 truncate">${svc}</span>
+                                    <div class="flex-1 bg-slate-800/60 rounded-full h-1.5 overflow-hidden">
+                                        <div class="${barColor} h-1.5 rounded-full transition-all duration-500" style="width:${pct}%"></div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-300 w-16 text-right shrink-0">$${total.toFixed(2)}/mo</span>
+                                    <span class="text-[10px] text-slate-600 w-8 text-right shrink-0">${pct}%</span>
+                                </div>`;
+                            }).join('');
+                        }
+                    }
+
+                    // ── Budget ────────────────────────────────────────────────
                     const budget = data.budget;
                     const budgetContainer = document.getElementById('budget-container');
                     const noBudgetContainer = document.getElementById('no-budget-container');
                     if (budget) {
-                        budgetContainer.classList.remove('hidden');
-                        noBudgetContainer.classList.add('hidden');
-                        
-                        document.getElementById('budget-name').innerText = budget.name;
-                        document.getElementById('budget-limit').innerText = budget.limit;
-                        document.getElementById('budget-spent').innerText = budget.spent;
-                        document.getElementById('budget-remaining').innerText = (parseFloat(budget.limit) - parseFloat(budget.spent)).toFixed(2);
-                        
-                        const currencies = document.querySelectorAll('.budget-currency');
-                        currencies.forEach(el => el.innerText = budget.currency);
-                        
+                        if (budgetContainer) budgetContainer.classList.remove('hidden');
+                        if (noBudgetContainer) noBudgetContainer.classList.add('hidden');
+
+                        const nameEl = document.getElementById('budget-name');
+                        if (nameEl) nameEl.innerText = budget.name;
+                        const nameBarEl = document.getElementById('budget-name-bar');
+                        if (nameBarEl) nameBarEl.innerText = budget.name;
+                        const limitEl = document.getElementById('budget-limit');
+                        if (limitEl) limitEl.innerText = budget.limit;
+                        const spentEl = document.getElementById('budget-spent');
+                        if (spentEl) spentEl.innerText = budget.spent;
+                        const remainEl = document.getElementById('budget-remaining');
+                        if (remainEl) remainEl.innerText = (parseFloat(budget.limit) - parseFloat(budget.spent)).toFixed(2);
+
+                        document.querySelectorAll('.budget-currency').forEach(el => el.innerText = budget.currency);
+
                         const progressPercent = Math.min((parseFloat(budget.spent) / parseFloat(budget.limit)) * 100, 100);
                         const progressBar = document.getElementById('budget-progress-bar');
                         if (progressBar) {
                             progressBar.style.width = `${progressPercent}%`;
                             const pct = document.getElementById('budget-percent');
                             if (pct) pct.innerText = `${Math.round(progressPercent)}%`;
-                            if (progressPercent >= 90) {
-                                progressBar.className = 'bg-red-500 h-2.5 rounded-full transition-all duration-500';
-                            } else if (progressPercent >= 75) {
-                                progressBar.className = 'bg-amber-500 h-2.5 rounded-full transition-all duration-500';
-                            } else {
-                                progressBar.className = 'bg-primary h-2.5 rounded-full transition-all duration-500';
-                            }
+                            progressBar.className = `h-2.5 rounded-full transition-all duration-700 ${
+                                progressPercent >= 90 ? 'bg-red-500' : progressPercent >= 75 ? 'bg-amber-500' : 'bg-primary'
+                            }`;
                         }
                     } else {
-                        budgetContainer.classList.add('hidden');
-                        noBudgetContainer.classList.remove('hidden');
+                        if (budgetContainer) budgetContainer.classList.add('hidden');
+                        if (noBudgetContainer) noBudgetContainer.classList.remove('hidden');
                     }
+
+                    // ── Last updated timestamp ────────────────────────────────
+                    const updEl = document.getElementById('cost-last-updated');
+                    if (updEl) updEl.innerText = `Updated ${new Date().toLocaleTimeString()}`;
                 }
             } catch (e) {
                 console.error("Failed to fetch spending data:", e);
+            } finally {
+                if (icon) icon.classList.remove('animate-spin');
             }
         }
 
@@ -1113,6 +1197,8 @@
                 
                 if (data.success && data.instances && data.instances.length > 0) {
                     window.dashboardState.resources = data.instances;
+                    // Update cost estimates now that resource data is fresh
+                    fetchSpending();
                     document.getElementById('resource-count').innerText = data.count;
 
                     // --- Live provisioning banner + adaptive refresh ---
