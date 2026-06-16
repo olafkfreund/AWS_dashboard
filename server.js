@@ -175,7 +175,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Gating Config API
 app.get('/api/auth/config', (req, res) => {
-    const activeProfile = process.env.AWS_PROFILE || 'Calitii';
+    const activeProfile = process.env.AWS_PROFILE || 'Synechron';
     res.json({
         githubEnabled: !!(githubClientId && githubClientSecret),
         githubHost: githubHost,
