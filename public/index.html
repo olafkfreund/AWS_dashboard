@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Status Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        aws: '#FF9900',
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        popover: {
+                            DEFAULT: "hsl(var(--popover))",
+                            foreground: "hsl(var(--popover-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --background: 222.2 84% 4.9%;
+            --foreground: 210 40% 98%;
+            --card: 222.2 84% 4.9%;
+            --card-foreground: 210 40% 98%;
+            --popover: 222.2 84% 4.9%;
+            --popover-foreground: 210 40% 98%;
+            --primary: 38 100% 50%; /* AWS Orange */
+            --primary-foreground: 222.2 47.4% 11.2%;
+            --secondary: 217.2 32.6% 17.5%;
+            --secondary-foreground: 210 40% 98%;
+            --muted: 217.2 32.6% 17.5%;
+            --muted-foreground: 215 20.2% 65.1%;
+            --accent: 217.2 32.6% 17.5%;
+            --accent-foreground: 210 40% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 217.2 32.6% 17.5%;
+            --input: 217.2 32.6% 17.5%;
+            --ring: 38 100% 50%;
+            --radius: 0.5rem;
+        }
+
+        body {
+            background-color: hsl(var(--background));
+            min-height: 100vh;
+            color: hsl(var(--foreground));
+            font-family: 'Inter', sans-serif;
+        }
+        .glass-panel {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+        .card-hover {
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            border-color: hsl(var(--primary) / 0.5);
+        }
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #FF9900;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Assistant Popup Styles */
+        .copilot-badge-btn {
+            position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px;
+            border-radius: 50%; background: #FF9900; color: #000; border: none;
+            box-shadow: 0 4px 15px rgba(255, 153, 0, 0.4); font-size: 24px; cursor: pointer;
+            z-index: 9999; display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .copilot-badge-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(255, 153, 0, 0.6); }
+        
+        .copilot-chat-popup {
+            position: fixed; bottom: 90px; right: 24px; width: 350px; height: 500px;
+            background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 9998; display: none;
+            flex-direction: column; overflow: hidden; font-family: 'Inter', sans-serif;
+        }
+        .copilot-chat-header {
+            background: rgba(15, 23, 42, 0.9); padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; align-items: center; color: white; font-weight: 600;
+        }
+        .copilot-chat-body {
+            flex-grow: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+            background: rgba(30, 41, 59, 0.5);
+        }
+        .copilot-chat-input-area {
+            padding: 12px; background: #0f172a; border-top: 1px solid rgba(255,255,255,0.05);
+            display: flex; gap: 8px;
+        }
+        .copilot-chat-input {
+            flex-grow: 1; background: #1e293b; border: 1px solid rgba(255,255,255,0.1);
+            color: white; border-radius: 6px; padding: 8px 12px; outline: none;
+        }
+        .copilot-chat-send {
+            background: #FF9900; color: black; border: none; border-radius: 6px; padding: 0 16px; cursor: pointer; font-weight: bold;
+        }
+        .msg-bot { background: #334155; padding: 10px 14px; border-radius: 8px 8px 8px 0; max-width: 85%; align-self: flex-start; color: #e2e8f0; font-size: 14px; }
+        .msg-user { background: #FF9900; color: black; padding: 10px 14px; border-radius: 8px 8px 0 8px; max-width: 85%; align-self: flex-end; font-size: 14px; font-weight: 500; }
+    </style>
+    <!-- FontAwesome for Assistant Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Central Navigation Tabs -->
+        <div class="flex justify-center mb-8">
+            <div class="bg-card text-card-foreground border border-border flex p-1 space-x-1 rounded-lg">
+                <a href="#" onclick="showView('aws')" id="nav-aws" class="px-6 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow">AWS Overview</a>
+                <a href="gitlab/index.html" class="px-6 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">GitLab</a>
+                <a href="github/index.html" class="px-6 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">GitHub</a>
+                <a href="#" onclick="showView('settings')" id="nav-settings" class="px-6 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">Settings</a>
+            </div>
+        </div>
+
+        <div id="view-aws">
+            <header class="flex justify-between items-center mb-10">
+                <div>
+                    <h1 class="text-4xl font-bold tracking-tight flex items-center">
+                        AWS Operations Dashboard
+                        <span id="demo-badge" class="hidden ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                            <span class="w-1.5 h-1.5 bg-amber-400 rounded-full mr-1.5 animate-pulse"></span>
+                            GitHub Pages Demo
+                        </span>
+                    </h1>
+                    <p class="text-muted-foreground mt-2">Synechron Profile • <span id="last-updated">Updating...</span></p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="sso-login-btn" onclick="triggerSSOLogin()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-sm py-2 px-4 rounded-md shadow-sm transition-colors flex items-center">
+                        <i class="fa-solid fa-key mr-2"></i> AWS SSO Login
+                    </button>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- EC2 Resources Panel -->
+                <div class="glass-panel p-6 card-hover">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-semibold flex items-center text-card-foreground">
+                            <i class="fa-solid fa-server mr-3 text-primary"></i> Running Resources
+                        </h2>
+                        <span id="resource-count" class="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-bold">0</span>
+                    </div>
+                    <div id="resources-loader" class="text-center py-8"><div class="loader"></div></div>
+                    <div id="resources-list" class="space-y-4 hidden max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                        <!-- Instances will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Logins Panel -->
+                <div class="glass-panel p-6 card-hover">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-semibold flex items-center text-card-foreground">
+                            <i class="fa-solid fa-users mr-3 text-primary"></i> Recent Logins (24h)
+                        </h2>
+                        <span id="login-count" class="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-bold">0</span>
+                    </div>
+                    <div id="logins-loader" class="text-center py-8"><div class="loader"></div></div>
+                    <div id="logins-list" class="space-y-4 hidden max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                        <!-- Logins will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-settings" style="display: none;">
+            <header class="mb-10">
+                <h1 class="text-4xl font-bold tracking-tight">Platform Settings</h1>
+                <p class="text-muted-foreground mt-2">Manage API tokens and backend configurations securely via .envrc</p>
+            </header>
+            
+            <div class="glass-panel p-8 max-w-2xl mx-auto">
+                <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
+                    <i class="fa-solid fa-key mr-3 text-primary"></i> Environment Tokens
+                </h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">GitHub Personal Access Token (PAT)</label>
+                        <input type="password" id="settings-github-pat" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="ghp_...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">GitLab Personal Access Token (PAT)</label>
+                        <input type="password" id="settings-gitlab-pat" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="glpat-...">
+                    </div>
+                    <button onclick="saveSettings()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-md shadow-sm transition-colors mt-4">
+                        Save to .envrc
+                    </button>
+                    <p id="settings-msg" class="text-sm mt-2 text-green-500 hidden"></p>
+                </div>
+            </div>
+
+            <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
+                <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
+                    <i class="fa-solid fa-sliders mr-3 text-primary"></i> Interface Options
+                </h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">Platform Theme</label>
+                        <select id="settings-theme" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary">
+                            <option value="dark">Dark Mode</option>
+                            <option value="light">Light Mode</option>
+                            <option value="gruvbox">Gruvbox Mode</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">Auto-Refresh Interval (GitLab/GitHub)</label>
+                        <select id="settings-refresh" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary">
+                            <option value="0">Never (Manual)</option>
+                            <option value="60">Every 1 minute</option>
+                            <option value="300">Every 5 minutes</option>
+                            <option value="600">Every 10 minutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
+                <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
+                    <i class="fa-solid fa-robot mr-3 text-primary"></i> Automations & Agent Interface
+                </h2>
+                
+                <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
+                    This platform implements the <strong>WebMCP standard</strong>. If you are using a browser assistant (like the Gemini Chrome extension or Copilot Sidecar with WebMCP support enabled), the page automatically registers its client-side capabilities.
+                    <br><br>
+                    An AI agent viewing this portal can natively read your projects list, fetch merge requests, and help triage issues across AWS, GitLab, and GitHub without requiring you to share token credentials outside this browser tab context.
+                </p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">Local Ollama API Endpoint (For local LLM fallback)</label>
+                        <input type="url" id="settings-ollama-url" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="http://localhost:11434">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Assistant Button -->
+    <button class="copilot-badge-btn" id="copilot-chat-btn" title="Ask Multi-Env Assistant">
+        <i class="fa-solid fa-robot"></i>
+    </button>
+
+    <!-- Assistant Chat Popup -->
+    <div class="copilot-chat-popup" id="copilot-chat-popup">
+        <div class="copilot-chat-header">
+            <div><i class="fa-solid fa-robot mr-2"></i> Multi-Env Assistant</div>
+            <button id="copilot-close-btn" class="hover:text-gray-300"><i class="fa-solid fa-minus"></i></button>
+        </div>
+        <div style="padding: 8px 12px; background: #0f172a; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span class="text-xs text-slate-400 font-bold">LLM Provider:</span>
+                <select id="llm-provider-select" class="bg-slate-800 text-white text-xs p-1 rounded border border-slate-600 outline-none">
+                    <option value="github-copilot" selected>GitHub Copilot</option>
+                    <option value="aws-q">AWS Q (Cloud)</option>
+                    <option value="gitlab-duo">GitLab Duo</option>
+                    <option value="ollama">Ollama (Local LLM)</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="claude">Claude</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+                <label for="enable-voice-feedback" class="text-xs text-slate-400 cursor-pointer select-none">Spoken Feedback</label>
+                <input type="checkbox" id="enable-voice-feedback" class="cursor-pointer" style="accent-color: #3b82f6;">
+            </div>
+        </div>
+        <div class="copilot-chat-body" id="copilot-chat-body">
+            <div class="msg-bot">
+                Hello! I am your Multi-Environment Assistant. I can help you with AWS, GitHub, and GitLab. How can I assist you today?
+            </div>
+        </div>
+        <div class="copilot-chat-input-area" style="position: relative;">
+            <input type="text" class="copilot-chat-input" id="copilot-chat-input" placeholder="Ask about instances, PRs, pipelines..." style="padding-right: 60px;">
+            <button id="copilot-mic-btn" style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px;">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+            <button class="copilot-chat-send" id="copilot-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <script>
+        // Check if we are running in static demo mode (e.g. GitHub Pages or local file)
+        const isStaticDemo = window.location.hostname.endsWith('github.io') || 
+                             window.location.hostname.endsWith('githubusercontent.com') ||
+                             window.location.protocol === 'file:';
+
+        if (isStaticDemo) {
+            console.log("Activating GitHub Pages Demo Mode (Mock AWS Data)");
+            // Un-hide the demo badge
+            document.addEventListener('DOMContentLoaded', () => {
+                const badge = document.getElementById('demo-badge');
+                if (badge) badge.classList.remove('hidden');
+            });
+
+            const originalFetch = window.fetch;
+            window.fetch = async function(url, options) {
+                const urlString = url.toString();
+                if (urlString.includes('/api/resources')) {
+                    return new Response(JSON.stringify({
+                        success: true,
+                        count: 4,
+                        instances: [
+                            { name: "SARC-Production-App", id: "i-09f1a23b456cd78ef", type: "t3.large", publicIp: "54.210.12.89" },
+                            { name: "SARC-Staging-Database", id: "i-08a9c87d654ef321a", type: "db.m5.xlarge", publicIp: null },
+                            { name: "SARC-Jenkins-CI", id: "i-0bcde123f4567890a", type: "t3.medium", publicIp: "34.200.45.112" },
+                            { name: "SARC-Kubernetes-Control", id: "i-0e1f2a3b4c5d6e7f8", type: "m5.2xlarge", publicIp: "52.8.210.14" }
+                        ]
+                    }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                if (urlString.includes('/api/logins')) {
+                    return new Response(JSON.stringify({
+                        success: true,
+                        count: 3,
+                        logins: [
+                            { username: "olafkfreund", userType: "IAMUser", sourceIp: "86.12.34.112", time: new Date(Date.now() - 3600000).toISOString() },
+                            { username: "SynechronAdmin", userType: "AssumedRole", sourceIp: "192.0.2.45", time: new Date(Date.now() - 14400000).toISOString() },
+                            { username: "SecurityScanner", userType: "AssumedRole", sourceIp: "54.89.22.10", time: new Date(Date.now() - 43200000).toISOString() }
+                        ]
+                    }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                if (urlString.includes('/api/config/tokens')) {
+                    return new Response(JSON.stringify({
+                        github: localStorage.getItem('gh_pat') || '',
+                        gitlab: ''
+                    }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                if (urlString.includes('/api/auth/sso')) {
+                    return new Response(JSON.stringify({
+                        success: true,
+                        message: "SSO Login simulated successfully in Demo Mode."
+                    }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                // Fallback to original fetch
+                return originalFetch.apply(this, arguments);
+            };
+        }
+
+        // Global state for WebMCP to access
+        window.dashboardState = {
+            resources: [],
+            logins: []
+        };
+
+        // Navigation UI logic
+        function showView(viewId) {
+            document.getElementById('view-aws').style.display = viewId === 'aws' ? 'block' : 'none';
+            document.getElementById('view-settings').style.display = viewId === 'settings' ? 'block' : 'none';
+            
+            // Update active state
+            document.getElementById('nav-aws').className = viewId === 'aws' 
+                ? 'px-6 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow'
+                : 'px-6 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors';
+            
+            document.getElementById('nav-settings').className = viewId === 'settings' 
+                ? 'px-6 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow'
+                : 'px-6 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors';
+                
+            if (viewId === 'settings') loadSettings();
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/config/tokens');
+                const data = await res.json();
+                if (data.github) document.getElementById('settings-github-pat').value = data.github;
+                if (data.gitlab) document.getElementById('settings-gitlab-pat').value = data.gitlab;
+            } catch (e) {
+                console.error("Failed to load settings");
+            }
+            // Load Interface Options from localStorage
+            const theme = localStorage.getItem('theme') || 'dark';
+            const refresh = localStorage.getItem('refresh_interval') || '300';
+            const ollamaUrl = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
+            document.getElementById('settings-theme').value = theme;
+            document.getElementById('settings-refresh').value = refresh;
+            document.getElementById('settings-ollama-url').value = ollamaUrl;
+        }
+
+        async function saveSettings() {
+            const github = document.getElementById('settings-github-pat').value;
+            const gitlab = document.getElementById('settings-gitlab-pat').value;
+            const msg = document.getElementById('settings-msg');
+            
+            // Save Interface Options to localStorage
+            const theme = document.getElementById('settings-theme').value;
+            const refresh = document.getElementById('settings-refresh').value;
+            const ollamaUrl = document.getElementById('settings-ollama-url').value;
+            localStorage.setItem('theme', theme);
+            localStorage.setItem('refresh_interval', refresh);
+            localStorage.setItem('copilot_ollama_url', ollamaUrl);
+            
+            try {
+                const res = await fetch('/api/config/tokens', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ github, gitlab })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    msg.textContent = "Tokens securely saved to .envrc! Changes applied immediately across tabs.";
+                    msg.classList.remove('hidden', 'text-red-500');
+                    msg.classList.add('text-green-500');
+                    
+                    // Also update localStorage so client apps get them instantly without reboot
+                    if (github) localStorage.setItem('gh_pat', github);
+                    if (gitlab) localStorage.setItem('gl_pat', gitlab);
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (e) {
+                msg.textContent = "Error saving settings: " + e.message;
+                msg.classList.remove('hidden', 'text-green-500');
+                msg.classList.add('text-red-500');
+            }
+            setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
+        // Format dates
+        const formatDate = (dateString) => {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        };
+
+        // Fetch Resources
+        async function fetchResources() {
+            try {
+                const res = await fetch('/api/resources');
+                const data = await res.json();
+                
+                document.getElementById('resources-loader').classList.add('hidden');
+                const list = document.getElementById('resources-list');
+                list.classList.remove('hidden');
+                
+                if (data.success && data.instances.length > 0) {
+                    window.dashboardState.resources = data.instances;
+                    document.getElementById('resource-count').innerText = data.count;
+                    
+                    list.innerHTML = data.instances.map(inst => `
+                        <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700 card-hover">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-bold text-white">${inst.name}</h3>
+                                    <p class="text-sm text-slate-400 mt-1">${inst.id}</p>
+                                </div>
+                                <span class="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded uppercase">${inst.type}</span>
+                            </div>
+                            <div class="mt-3 text-sm text-slate-400 flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                                ${inst.publicIp || 'Private Only'}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = `<p class="text-slate-400 italic">No running instances found.</p>`;
+                }
+            } catch (err) {
+                console.error(err);
+                document.getElementById('resources-loader').innerHTML = `<p class="text-red-400">Failed to load resources.</p>`;
+            }
+        }
+
+        // Fetch Logins
+        async function fetchLogins() {
+            try {
+                const res = await fetch('/api/logins');
+                const data = await res.json();
+                
+                document.getElementById('logins-loader').classList.add('hidden');
+                const list = document.getElementById('logins-list');
+                list.classList.remove('hidden');
+                
+                if (data.success && data.logins.length > 0) {
+                    window.dashboardState.logins = data.logins;
+                    document.getElementById('login-count').innerText = data.count;
+                    
+                    list.innerHTML = data.logins.map(login => `
+                        <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700 card-hover flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-white flex items-center">
+                                    ${login.username}
+                                    <span class="ml-2 text-[10px] bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full">${login.userType}</span>
+                                </h3>
+                                <p class="text-xs text-slate-400 mt-1">${login.sourceIp}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-slate-300">${formatDate(login.time)}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = `<p class="text-slate-400 italic">No recent logins found in the last 24h.</p>`;
+                }
+            } catch (err) {
+                console.error(err);
+                document.getElementById('logins-loader').innerHTML = `<p class="text-red-400">Failed to load logins.</p>`;
+            }
+        }
+
+        // Trigger Local AWS SSO Login
+        async function triggerSSOLogin() {
+            const btn = document.getElementById('sso-login-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<div class="loader mr-2" style="width: 16px; height: 16px; border-top-color: black;"></div> Opening Browser...`;
+            btn.disabled = true;
+            
+            try {
+                const res = await fetch('/api/auth/sso', { method: 'POST' });
+                const data = await res.json();
+                
+                if (data.success) {
+                    btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Login Triggered!`;
+                    // Wait a bit for the user to complete the browser flow, then refresh data
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        document.getElementById('resources-list').classList.add('hidden');
+                        document.getElementById('resources-loader').classList.remove('hidden');
+                        document.getElementById('logins-list').classList.add('hidden');
+                        document.getElementById('logins-loader').classList.remove('hidden');
+                        fetchResources();
+                        fetchLogins();
+                    }, 8000); // Wait 8 seconds before auto-refresh
+                } else {
+                    alert('Error: ' + data.error);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Failed to trigger SSO login.');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // WebMCP Integration
+        function initializeWebMCP() {
+            if (navigator.modelContext && typeof navigator.modelContext.registerTool === 'function') {
+                console.log("WebMCP supported, registering tools...");
+                
+                navigator.modelContext.registerTool({
+                    name: "get_aws_running_instances",
+                    description: "Returns a list of currently running AWS EC2 instances on the Synechron profile.",
+                    inputSchema: { type: "object", properties: {} }
+                }, async () => {
+                    return JSON.stringify(window.dashboardState.resources);
+                });
+
+                navigator.modelContext.registerTool({
+                    name: "get_aws_recent_logins",
+                    description: "Returns a list of successful AWS console logins in the past 24 hours.",
+                    inputSchema: { type: "object", properties: {} }
+                }, async () => {
+                    return JSON.stringify(window.dashboardState.logins);
+                });
+            } else {
+                console.log("WebMCP not natively supported by this browser. Extensions like Copilot or Gemini can inject polyfills to access window.dashboardState.");
+            }
+        }
+
+        // Assistant Chat Logic
+        const chatBtn = document.getElementById('copilot-chat-btn');
+        const chatPopup = document.getElementById('copilot-chat-popup');
+        const closeBtn = document.getElementById('copilot-close-btn');
+        const sendBtn = document.getElementById('copilot-send-btn');
+        const chatInput = document.getElementById('copilot-chat-input');
+        const chatBody = document.getElementById('copilot-chat-body');
+        const providerSelect = document.getElementById('llm-provider-select');
+
+        chatBtn.addEventListener('click', () => {
+            chatPopup.style.display = chatPopup.style.display === 'flex' ? 'none' : 'flex';
+        });
+
+        closeBtn.addEventListener('click', () => {
+            chatPopup.style.display = 'none';
+        });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function parseMarkdown(text) {
+            let html = escapeHtml(text);
+            html = html.replace(/```[a-zA-Z0-9]*\n([\s\S]+?)```/g, '<pre class="bg-slate-900 p-2 rounded text-xs font-mono my-2 overflow-x-auto text-left">$1</pre>');
+            html = html.replace(/```([\s\S]+?)```/g, '<pre class="bg-slate-900 p-2 rounded text-xs font-mono my-2 overflow-x-auto text-left">$1</pre>');
+            html = html.replace(/`([^`]+)`/g, '<code class="bg-slate-800 px-1 rounded text-xs font-mono text-pink-400">$1</code>');
+            html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        function addMessage(text, isUser) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = isUser ? 'msg-user' : 'msg-bot';
+            if (isUser) {
+                msgDiv.innerText = text;
+            } else {
+                msgDiv.innerHTML = parseMarkdown(text);
+            }
+            chatBody.appendChild(msgDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        function getAssistantSystemMessage(providerName) {
+            const instances = window.dashboardState.resources || [];
+            const logins = window.dashboardState.logins || [];
+            
+            const instSummary = instances.map(inst => {
+                return `- ${inst.name || 'Unnamed'} (${inst.id}): Type=${inst.type || 'N/A'}, PublicIP=${inst.publicIp || 'None'}, State=running`;
+            }).join('\n');
+            
+            const loginSummary = logins.map(l => {
+                return `- User ${l.username} (${l.userType}) from IP ${l.sourceIp} at ${new Date(l.time).toLocaleString()}`;
+            }).join('\n');
+            
+            return `You are ${providerName}, an AI Assistant integrated into Olaf's AWS & DevOps Management Dashboard.
+You are helping Olaf Krasicki-Freund manage his cloud infrastructure.
+Here is the current live state of the AWS dashboard:
+- Active EC2 Instances (${instances.length} total):
+${instSummary || 'None'}
+- Recent Console Logins (${logins.length} total):
+${loginSummary || 'None'}
+
+Please answer Olaf's questions about these resources and login events, or general DevOps questions, keeping in mind your role as ${providerName}. Keep your responses helpful, concise, and formatted in Markdown.`;
+        }
+
+        async function handleSend() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            
+            addMessage(text, true);
+            chatInput.value = '';
+            
+            // Show typing indicator
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'msg-bot text-slate-400 italic';
+            typingDiv.innerText = 'Thinking...';
+            chatBody.appendChild(typingDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+            
+            const providerVal = providerSelect.value;
+            const providerText = providerSelect.options[providerSelect.selectedIndex].text;
+            
+            try {
+                let answer = '';
+                if (providerVal === 'ollama') {
+                    const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
+                    const model = 'llama3';
+                    const systemMessage = getAssistantSystemMessage(providerText);
+                    
+                    const res = await fetch(`${url}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: model,
+                            system: systemMessage,
+                            prompt: text,
+                            stream: false
+                        })
+                    });
+                    
+                    if (!res.ok) throw new Error('Ollama returned status ' + res.status);
+                    const data = await res.json();
+                    answer = data.response || 'No response content';
+                } else {
+                    // Try to load GitHub PAT token
+                    let token = localStorage.getItem('gh_pat');
+                    if (!token) {
+                        try {
+                            const tokenRes = await fetch('/api/config/tokens');
+                            const tokenData = await tokenRes.json();
+                            if (tokenData.github) {
+                                token = tokenData.github;
+                                localStorage.setItem('gh_pat', token);
+                            }
+                        } catch (e) {
+                            console.error("Auto-fetch GitHub token failed", e);
+                        }
+                    }
+                    
+                    if (!token) {
+                        if (isStaticDemo) {
+                            // Local mock assistant response for demo interactivity
+                            setTimeout(() => {
+                                const lowerText = text.toLowerCase();
+                                let responseText = "I'm running in **GitHub Pages Demo Mode**. To use a live LLM (like GPT-4o) with real-time data, please save a GitHub Personal Access Token in the **Settings** tab.\n\nHere is a simulated response based on the mock data:\n\n";
+                                if (lowerText.includes("instance") || lowerText.includes("ec2") || lowerText.includes("running") || lowerText.includes("resource")) {
+                                    responseText += "There are 4 active EC2 instances:\n- **SARC-Production-App** (`i-09f1a23b456cd78ef` | `t3.large` | IP: `54.210.12.89`)\n- **SARC-Staging-Database** (`i-08a9c87d654ef321a` | `db.m5.xlarge` | IP: `None (Private)`)\n- **SARC-Jenkins-CI** (`i-0bcde123f4567890a` | `t3.medium` | IP: `34.200.45.112`)\n- **SARC-Kubernetes-Control** (`i-0e1f2a3b4c5d6e7f8` | `m5.2xlarge` | IP: `52.8.210.14`)";
+                                } else if (lowerText.includes("login") || lowerText.includes("cloudtrail") || lowerText.includes("logged") || lowerText.includes("who")) {
+                                    responseText += "Recent console login events in the last 24h:\n1. **olafkfreund** (IAMUser) from `86.12.34.112` (1 hour ago)\n2. **SynechronAdmin** (AssumedRole) from `192.0.2.45` (4 hours ago)\n3. **SecurityScanner** (AssumedRole) from `54.89.22.10` (12 hours ago)";
+                                } else {
+                                    responseText += "I can help you monitor and query the dashboard state. For instance, try asking: *'Are there any running EC2 instances?'* or *'Show recent console login events.'*";
+                                }
+                                chatBody.removeChild(typingDiv);
+                                addMessage(responseText, false);
+                                if (voiceFeedbackCheck.checked && 'speechSynthesis' in window) {
+                                    window.speechSynthesis.cancel();
+                                    const utterance = new SpeechSynthesisUtterance(responseText);
+                                    window.speechSynthesis.speak(utterance);
+                                }
+                            }, 1000);
+                            return;
+                        }
+                        throw new Error('No GitHub Personal Access Token found. Please save your GitHub PAT in the Settings tab to authenticate.');
+                    }
+                    
+                    const systemMessage = getAssistantSystemMessage(providerText);
+                    
+                    // Fetch from GitHub Models endpoint using the PAT
+                    const res = await fetch('https://models.github.ai/inference/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'gpt-4o',
+                            messages: [
+                                { role: 'system', content: systemMessage },
+                                { role: 'user', content: text }
+                            ],
+                            temperature: 0.2
+                        })
+                    });
+                    
+                    if (res.status === 403) {
+                        throw new Error('Access denied. Please check if your GitHub Token has Copilot access or permissions for GitHub Models in Settings.');
+                    } else if (!res.ok) {
+                        throw new Error('API returned status ' + res.status);
+                    }
+                    
+                    const data = await res.json();
+                    answer = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : 'No response content';
+                }
+                
+                chatBody.removeChild(typingDiv);
+                addMessage(answer, false);
+                
+                if (voiceFeedbackCheck.checked && 'speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(answer);
+                    window.speechSynthesis.speak(utterance);
+                }
+            } catch (err) {
+                console.error(err);
+                if (chatBody.contains(typingDiv)) {
+                    chatBody.removeChild(typingDiv);
+                }
+                addMessage(`Error: ${err.message}`, false);
+            }
+        }
+
+        const micBtn = document.getElementById('copilot-mic-btn');
+        const voiceFeedbackCheck = document.getElementById('enable-voice-feedback');
+        
+        let recognition = null;
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            
+            recognition.onstart = function() {
+                micBtn.style.color = '#ef4444';
+            };
+            
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                chatInput.value = transcript;
+                handleSend();
+            };
+            
+            recognition.onerror = function() { micBtn.style.color = '#94a3b8'; };
+            recognition.onend = function() { micBtn.style.color = '#94a3b8'; };
+        }
+        
+        micBtn.addEventListener('click', () => {
+            if (recognition) recognition.start();
+            else alert('Speech recognition not supported in this browser.');
+        });
+
+        sendBtn.addEventListener('click', handleSend);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSend();
+        });
+
+        // Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('last-updated').innerText = new Date().toLocaleTimeString();
+            fetchResources();
+            fetchLogins();
+            initializeWebMCP();
+        });
+    </script>
+</body>
+</html>
