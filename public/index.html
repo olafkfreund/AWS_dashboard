@@ -885,6 +885,16 @@
         // ── Resource Detail Slide-over ─────────────────────────────────────
         window._resourceMap = {};
 
+        // Delegated click listener — catches clicks on any [data-rid] card
+        document.addEventListener('click', function(e) {
+            const card = e.target.closest('[data-rid]');
+            if (!card) return;
+            // Ignore clicks on interactive children (buttons, links)
+            if (e.target.closest('button, a')) return;
+            const id = card.dataset.rid;
+            if (id) showResourceDetail(id);
+        });
+
         function closeResourceDetail() {
             document.getElementById('resource-detail-panel').classList.remove('open');
             document.getElementById('resource-detail-backdrop').classList.remove('open');
@@ -1102,6 +1112,9 @@
                         }
                     }
 
+                    // Reset resource map for this render cycle
+                    window._resourceMap = {};
+
                     // --- Group resources by their 'group' field ---
                     const grouped = {};
                     const groupOrder = []; // preserve insertion order
@@ -1216,13 +1229,11 @@
                                 ? `<i class="fa-solid fa-gear animate-spin text-amber-400 text-xs shrink-0"></i>` : '';
 
                             // Store resource in global map for detail panel
-                            const safeId = CSS.escape ? inst.id : inst.id;
-                            window._resourceMap = window._resourceMap || {};
                             window._resourceMap[inst.id] = inst;
 
                             return `
                                 <div class="${cardBg} p-3.5 rounded-lg border ${cardBorder} card-hover overflow-hidden cursor-pointer select-none"
-                                     onclick="showResourceDetail(${JSON.stringify(inst.id)})">
+                                     data-rid="${inst.id.replace(/"/g, '&quot;')}">
                                     <div class="flex items-start gap-2 min-w-0">
                                         <div class="flex-1 min-w-0 overflow-hidden">
                                             <div class="flex items-center gap-1.5 flex-wrap mb-1">
