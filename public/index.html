@@ -128,6 +128,10 @@
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
             border-color: hsl(var(--primary) / 0.5);
         }
+        @keyframes progress-slide {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
         .loader {
             border: 3px solid rgba(255, 255, 255, 0.1);
             border-top: 3px solid #FF9900;
@@ -265,6 +269,15 @@
                                 <i class="fa-solid fa-file-pdf text-sm"></i> PDF
                             </button>
                         </div>
+                    </div>
+                    <div id="provisioning-live-bar" class="hidden mb-4 flex items-center gap-3 bg-amber-900/20 border border-amber-700/40 rounded-lg px-4 py-2.5">
+                        <span class="relative flex h-3 w-3 shrink-0">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        </span>
+                        <span class="text-sm font-semibold text-amber-300">Provisioning Active</span>
+                        <span class="text-xs text-amber-400/70">— AWS resources are being created. Refreshing every 15 seconds automatically.</span>
+                        <i class="fa-solid fa-arrows-rotate animate-spin text-amber-400 ml-auto text-xs"></i>
                     </div>
                     <div id="resources-loader" class="text-center py-8"><div class="loader"></div></div>
                     <div id="resources-list" class="space-y-4 hidden">
@@ -793,6 +806,23 @@
                     window.dashboardState.resources = data.instances;
                     document.getElementById('resource-count').innerText = data.count;
 
+                    // --- Live provisioning banner + adaptive refresh ---
+                    const liveBar = document.getElementById('provisioning-live-bar');
+                    if (data.hasTransient) {
+                        if (liveBar) liveBar.classList.remove('hidden');
+                        // Switch to 15s fast-refresh while resources are being created
+                        if (!window._fastRefreshActive) {
+                            window._fastRefreshActive = true;
+                            window._fastRefreshTimer = setInterval(() => fetchResources(), 15000);
+                        }
+                    } else {
+                        if (liveBar) liveBar.classList.add('hidden');
+                        if (window._fastRefreshActive) {
+                            window._fastRefreshActive = false;
+                            clearInterval(window._fastRefreshTimer);
+                        }
+                    }
+
                     // --- Group resources by their 'group' field ---
                     const grouped = {};
                     const groupOrder = []; // preserve insertion order
@@ -812,14 +842,16 @@
                         'Internet Gateway': 'bg-teal-900/40 text-teal-300 border-teal-700/40',
                         'EKS':              'bg-cyan-900/40 text-cyan-300 border-cyan-700/40',
                         'Lambda':           'bg-violet-900/40 text-violet-300 border-violet-700/40',
+                        'CloudFormation':   'bg-yellow-900/40 text-yellow-300 border-yellow-700/40',
                     };
                     const GROUP_ICONS = {
-                        'EKS':     'fa-dharmachakra',
-                        'Network': 'fa-network-wired',
-                        'Lambda':  'fa-bolt',
-                        'EC2':     'fa-server',
-                        'S3':      'fa-bucket',
-                        'Other':   'fa-boxes-stacked',
+                        'EKS':             'fa-dharmachakra',
+                        'Network':         'fa-network-wired',
+                        'Lambda':          'fa-bolt',
+                        'EC2':             'fa-server',
+                        'S3':              'fa-bucket',
+                        'CloudFormation':  'fa-layer-group',
+                        'Other':           'fa-boxes-stacked',
                     };
                     const getGroupIcon = g => {
                         for (const [k, v] of Object.entries(GROUP_ICONS)) if (g.startsWith(k)) return v;
@@ -845,7 +877,15 @@
 
                             const isEKS = inst.service === 'EKS';
                             const isLambda = inst.service === 'Lambda';
-                            const cardBorder = isEKS ? 'border-cyan-800/40' : isLambda ? 'border-violet-800/40' : 'border-slate-700/60';
+                            const isCFN = inst.service === 'CloudFormation';
+                            const isCreating = inst.isTransient || state === 'creating';
+
+                            const cardBorder = isEKS ? 'border-cyan-800/40'
+                                : isLambda ? 'border-violet-800/40'
+                                : isCFN && isCreating ? 'border-amber-700/50'
+                                : isCFN ? 'border-yellow-800/40'
+                                : 'border-slate-700/60';
+                            const cardBg = isCFN && isCreating ? 'bg-amber-950/10' : 'bg-slate-800/40';
 
                             let extraLinks = '';
                             if (isEKS) {
@@ -857,18 +897,30 @@
                             const costColor = parseFloat(inst.costEstimate || 0) > 0 ? 'text-emerald-400' : 'text-slate-500';
                             const statusText = (isEKS || inst.service === 'EC2')
                                 ? `${state.toUpperCase()} • ${inst.publicIp}`
+                                : isCFN ? (inst.cfnStatus || state).replace(/_/g, ' ')
                                 : inst.publicIp;
 
+                            // CFN creating: animated progress bar at card bottom
+                            const cfnProgressBar = isCFN && isCreating ? `
+                                <div class="mt-2 h-0.5 w-full bg-slate-700/60 rounded overflow-hidden">
+                                    <div class="h-full bg-amber-500/60 rounded animate-pulse" style="width:100%;animation:progress-slide 2s linear infinite;"></div>
+                                </div>` : '';
+
+                            // CFN spinning icon next to name when creating
+                            const cfnSpinner = isCFN && isCreating
+                                ? `<i class="fa-solid fa-gear animate-spin text-amber-400 text-xs shrink-0"></i>` : '';
+
                             return `
-                                <div class="bg-slate-800/40 p-3.5 rounded-lg border ${cardBorder} card-hover">
+                                <div class="${cardBg} p-3.5 rounded-lg border ${cardBorder} card-hover">
                                     <div class="flex justify-between items-start gap-2">
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center gap-2 mb-1 flex-wrap">
                                                 <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${badgeColor}">${inst.service}</span>
                                                 ${regionBadge}
+                                                ${cfnSpinner}
                                                 <h4 class="font-semibold text-sm text-white truncate">${inst.name}</h4>
                                             </div>
-                                            <p class="text-[10px] text-slate-500 font-mono truncate">${inst.id}</p>
+                                            <p class="text-[10px] text-slate-500 font-mono truncate">${inst.id.split('/').pop()}</p>
                                             ${extraLinks ? `<div class="mt-1">${extraLinks}</div>` : ''}
                                         </div>
                                         <div class="text-right shrink-0">
@@ -878,9 +930,10 @@
                                     </div>
                                     <div class="mt-2 pt-2 border-t border-slate-700/40 flex items-center gap-2 text-xs text-slate-400">
                                         <span class="w-1.5 h-1.5 rounded-full ${dotColor} shrink-0"></span>
-                                        <span class="truncate">${statusText}</span>
+                                        <span class="truncate ${isCFN && isCreating ? 'text-amber-400/80' : ''}">${statusText}</span>
                                     </div>
                                     <p class="text-[10px] text-slate-500 mt-1 truncate">${inst.type}</p>
+                                    ${cfnProgressBar}
                                 </div>`;
                         }).join('');
 

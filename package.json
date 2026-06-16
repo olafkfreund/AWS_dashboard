@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "@aws-sdk/client-budgets": "^3.1070.0",
+    "@aws-sdk/client-cloudformation": "^3.1070.0",
     "@aws-sdk/client-cloudtrail": "^3.1069.0",
     "@aws-sdk/client-cost-explorer": "^3.1070.0",
     "@aws-sdk/client-ec2": "^3.1069.0",

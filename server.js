@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 const { EKSClient, ListClustersCommand, DescribeClusterCommand, ListNodegroupsCommand, DescribeNodegroupCommand } = require('@aws-sdk/client-eks');
 const { LambdaClient, ListFunctionsCommand, GetFunctionUrlConfigCommand } = require('@aws-sdk/client-lambda');
+const { CloudFormationClient, ListStacksCommand: ListCFNStacksCommand, DescribeStacksCommand } = require('@aws-sdk/client-cloudformation');
 const {
     EC2Client,
     DescribeInstancesCommand,
@@ -745,6 +746,7 @@ const bgClient = new BudgetsClient(awsConfig);
 const s3Client = new S3Client(awsConfig);
 const eksClient = new EKSClient(awsConfig);
 const lambdaClient = new LambdaClient(awsConfig);
+const cfnClient = new CloudFormationClient(awsConfig);
 
 
 // Helper to get dynamic AWS Clients based on user SSO session
@@ -767,7 +769,8 @@ function getAwsClients(req) {
                 budgets: new BudgetsClient(config),
                 s3: new S3Client(config),
                 eks: new EKSClient(config),
-                lambda: new LambdaClient(config)
+                lambda: new LambdaClient(config),
+                cfn: new CloudFormationClient(config)
             };
         }
     }
@@ -778,7 +781,8 @@ function getAwsClients(req) {
         budgets: bgClient,
         s3: s3Client,
         eks: eksClient,
-        lambda: lambdaClient
+        lambda: lambdaClient,
+        cfn: cfnClient
     };
 }
 
@@ -819,7 +823,7 @@ const getS3CostEstimate = (bucketName) => {
 // Endpoint to get all AWS resources (EC2 instances, S3 buckets, VPCs, Subnets, Security Groups)
 app.get('/api/resources', async (req, res) => {
     try {
-        const { ec2, s3, eks, lambda } = getAwsClients(req);
+        const { ec2, s3, eks, lambda, cfn } = getAwsClients(req);
         const resources = [];
         
         // 1. Fetch EC2 instances (all states)
@@ -831,14 +835,18 @@ app.get('/api/resources', async (req, res) => {
                     if (reservation.Instances) {
                         reservation.Instances.forEach(instance => {
                             const nameTag = instance.Tags?.find(tag => tag.Key === 'Name');
+                            const eksClusterTag = instance.Tags?.find(t => t.Key === 'eks:cluster-name');
                             const type = instance.InstanceType;
                             const cost = getEc2CostEstimate(type);
                             const stateName = instance.State?.Name || 'running';
+                            // Exclude terminated instances to reduce noise
+                            if (stateName === 'terminated') return;
                             resources.push({
                                 id: instance.InstanceId,
                                 name: nameTag ? nameTag.Value : 'Unnamed EC2',
                                 type: type,
                                 service: 'EC2',
+                                group: eksClusterTag ? `EKS: ${eksClusterTag.Value}` : 'EC2 Instances',
                                 state: stateName,
                                 launchTime: instance.LaunchTime,
                                 publicIp: instance.PublicIpAddress || 'Private Only',
@@ -856,8 +864,7 @@ app.get('/api/resources', async (req, res) => {
 
         // 2. Fetch S3 buckets
         try {
-            const s3Command = new ListBucketsCommand({});
-            const s3Response = await s3.send(s3Command);
+            const s3Response = await s3.send(new ListBucketsCommand({}));
             if (s3Response.Buckets) {
                 s3Response.Buckets.forEach(bucket => {
                     const cost = getS3CostEstimate(bucket.Name);
@@ -866,6 +873,7 @@ app.get('/api/resources', async (req, res) => {
                         name: bucket.Name,
                         type: 'Standard S3 Bucket',
                         service: 'S3',
+                        group: 'S3 Buckets',
                         state: 'running',
                         launchTime: bucket.CreationDate,
                         publicIp: 'N/A (Object Storage)',
@@ -875,11 +883,65 @@ app.get('/api/resources', async (req, res) => {
                     });
                 });
             }
-        } catch (s3Err) {
-            console.error('Error fetching S3 buckets:', s3Err);
-        }
+        } catch (s3Err) { console.error('Error fetching S3 buckets:', s3Err); }
 
-        // 3. Fetch VPCs — build a lookup map for grouping
+        // 2b. Fetch CloudFormation Stacks — visible the moment provisioning starts
+        // Statuses that mean the stack is actively being created/updated/deleted
+        const CFN_TRANSIENT = new Set([
+            'CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS', 'DELETE_IN_PROGRESS',
+            'ROLLBACK_IN_PROGRESS', 'UPDATE_ROLLBACK_IN_PROGRESS',
+            'REVIEW_IN_PROGRESS', 'IMPORT_IN_PROGRESS'
+        ]);
+        const CFN_FAILED = new Set(['CREATE_FAILED', 'ROLLBACK_FAILED', 'UPDATE_ROLLBACK_FAILED', 'DELETE_FAILED']);
+        try {
+            // ListStacks with all non-deleted filters
+            const cfnStatuses = [
+                'CREATE_IN_PROGRESS', 'CREATE_FAILED', 'CREATE_COMPLETE',
+                'ROLLBACK_IN_PROGRESS', 'ROLLBACK_FAILED', 'ROLLBACK_COMPLETE',
+                'UPDATE_IN_PROGRESS', 'UPDATE_COMPLETE_CLEANUP_IN_PROGRESS', 'UPDATE_COMPLETE',
+                'UPDATE_ROLLBACK_IN_PROGRESS', 'UPDATE_ROLLBACK_FAILED', 'UPDATE_ROLLBACK_COMPLETE',
+                'REVIEW_IN_PROGRESS', 'IMPORT_IN_PROGRESS', 'IMPORT_COMPLETE', 'IMPORT_ROLLBACK_IN_PROGRESS'
+            ];
+            const cfnRes = await cfn.send(new ListCFNStacksCommand({ StackStatusFilter: cfnStatuses }));
+            const stacks = cfnRes.StackSummaries || [];
+
+            for (const stack of stacks) {
+                const name = stack.StackName;
+                const status = stack.StackStatus;
+
+                // Derive logical group from eksctl naming convention:
+                // eksctl-<cluster>-cluster → EKS: <cluster>
+                // eksctl-<cluster>-nodegroup-<ng> → EKS: <cluster>
+                let group = 'CloudFormation Stacks';
+                const eksMatch = name.match(/^eksctl-([^-]+(?:-[^-]+)*?)-(cluster|nodegroup)/);
+                if (eksMatch) group = `EKS: ${eksMatch[1]}`;
+
+                const isTransient = CFN_TRANSIENT.has(status);
+                const isFailed = CFN_FAILED.has(status);
+                const state = isTransient ? 'creating' : isFailed ? 'failed' : status === 'CREATE_COMPLETE' || status === 'UPDATE_COMPLETE' ? 'running' : status.toLowerCase().replace(/_/g, '-');
+
+                // Don't show ROLLBACK_COMPLETE (already cleaned up)
+                if (status === 'ROLLBACK_COMPLETE') continue;
+
+                resources.push({
+                    id: stack.StackId || name,
+                    name,
+                    type: `CloudFormation Stack • ${status.replace(/_/g, ' ')}`,
+                    service: 'CloudFormation',
+                    group,
+                    state,
+                    launchTime: stack.CreationTime,
+                    publicIp: 'N/A (Infrastructure Stack)',
+                    costEstimate: '0.00',
+                    lastMonthUsage: status,
+                    lastMonthCost: '0.00',
+                    cfnStatus: status,
+                    isTransient
+                });
+            }
+        } catch (cfnErr) { console.error('Error fetching CloudFormation stacks:', cfnErr.message); }
+
+
         const vpcNameMap = {};
         try {
             const vpcResponse = await ec2.send(new DescribeVpcsCommand({}));
@@ -1103,7 +1165,10 @@ app.get('/api/resources', async (req, res) => {
             }
         } catch (lambdaErr) { console.error('Error fetching Lambda functions:', lambdaErr.message); }
 
-        res.json({ success: true, count: resources.length, instances: resources });
+        const hasTransient = resources.some(r =>
+            ['creating', 'pending', 'updating', 'deleting'].includes(r.state) || r.isTransient
+        );
+        res.json({ success: true, count: resources.length, instances: resources, hasTransient });
 
     } catch (error) {
         console.error('Error in resources endpoint:', error);
