@@ -41,6 +41,23 @@ stop:
 run:
     node server.js
 
+# Run with nodemon — auto-reloads server.js on changes (no manual restart needed)
+dev:
+    #!/usr/bin/env bash
+    if [ -f .server.pid ] && kill -0 $(cat .server.pid) 2>/dev/null; then
+        echo "Stopping background server (PID: $(cat .server.pid)) before starting dev mode..."
+        just stop
+    fi
+    source .envrc 2>/dev/null || true
+    ./node_modules/.bin/nodemon \
+        --watch server.js \
+        --watch public/ \
+        --ext js,json,html \
+        --ignore 'node_modules/*' \
+        --ignore '.sessions.json' \
+        --ignore 'server.log' \
+        server.js
+
 # Refresh AWS SSO credentials
 login:
     aws sso login --profile Synechron
