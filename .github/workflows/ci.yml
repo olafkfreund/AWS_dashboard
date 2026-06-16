@@ -1,0 +1,85 @@
+name: CI Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Start Backend and Run Integration Smoke Test
+        run: |
+          # Spin up server in the background
+          # We provide mock env variables so it doesn't fail on missing AWS profiles
+          AWS_ACCESS_KEY_ID=mock AWS_SECRET_ACCESS_KEY=mock AWS_REGION=us-east-1 PORT=3000 node server.js &
+          
+          # Wait up to 10 seconds for port 3000 to be ready
+          for i in {1..10}; do
+            if curl -s http://localhost:3000/login.html > /dev/null; then
+              echo "Server successfully listening on port 3000!"
+              exit 0
+            fi
+            echo "Waiting for server to start..."
+            sleep 1
+          done
+          echo "Error: Server failed to start on port 3000 in time"
+          exit 1
+
+  dependency-and-security:
+    name: Security & Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Dependency Audit
+        run: npm audit --audit-level=high || echo "High/Critical dependencies vulnerabilities found"
+
+      - name: Run Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true # Do not block builds but report leaks
+
+      - name: Install and Run Trivy FS Scan
+        run: |
+          set -euo pipefail
+          TRIVY_VERSION="0.50.0"
+          curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | tar xz -C /tmp trivy
+          /tmp/trivy fs . \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --skip-dirs node_modules,.git \
+            --exit-code 0 \
+            --quiet
+
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t aws-status-dashboard:test .
