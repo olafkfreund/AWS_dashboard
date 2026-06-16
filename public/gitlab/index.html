@@ -777,11 +777,12 @@
           <label class="form-label" for="settings-copilot-provider">LLM Provider</label>
           <select id="settings-copilot-provider" class="form-control" style="max-width: 300px;">
             <option value="github">GitHub Models (GPT-4o)</option>
-            
-      <option value="ollama">Ollama (Local LLM)</option>
-      <option value="github-copilot" selected>GitHub Copilot</option>
-      <option value="gitlab-duo">GitLab Duo</option>
-      <option value="aws-q">AWS Q (Cloud)</option>
+            <option value="ollama">Ollama (Local LLM)</option>
+            <option value="gemini">Gemini</option>
+            <option value="claude">Claude</option>
+            <option value="github-copilot" selected>GitHub Copilot</option>
+            <option value="gitlab-duo">GitLab Duo</option>
+            <option value="aws-q">AWS Q (Cloud)</option>
     
           </select>
         </div>
@@ -878,8 +879,9 @@
   <div class="copilot-chat-provider-select" id="copilot-chat-provider-select" style="padding: 8px 12px; background-color: var(--bg-soft); border-bottom: 2px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;">
     <span style="font-size: 11px; color: var(--fg-secondary); font-weight: bold;">LLM Provider:</span>
     <select id="copilot-provider-select" class="form-control" style="font-size: 11px; padding: 2px 6px; height: auto; max-width: 170px; margin: 0; line-height: 1;">
-      
       <option value="ollama">Ollama (Local LLM)</option>
+      <option value="gemini">Gemini</option>
+      <option value="claude">Claude</option>
       <option value="github-copilot" selected>GitHub Copilot</option>
       <option value="gitlab-duo">GitLab Duo</option>
       <option value="aws-q">AWS Q (Cloud)</option>

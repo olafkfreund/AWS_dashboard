@@ -2121,6 +2121,8 @@
         return;
       }
       updateCopilotStatus('connected', 'Connected (GitHub Models)');
+    } else if (provider === 'gemini' || provider === 'claude') {
+      updateCopilotStatus('connected', `Local AI: ${provider === 'gemini' ? 'Gemini' : 'Claude'}`);
     } else if (provider === 'github-copilot') {
       const copilotToken = localStorage.getItem('gh_copilot_pat') || localStorage.getItem('gh_pat') || '';
       if (!copilotToken) {
@@ -2362,6 +2364,122 @@ Use this information to answer user questions about tasks, merge requests, issue
           placeholder.innerHTML = `<span style="color: var(--red);">Ollama Error: ${escapeHtml(err.message)}</span>`;
         }
         updateCopilotStatus('disconnected', 'Ollama Error');
+      }
+    } else if (provider === 'gemini' || provider === 'claude') {
+      try {
+        updateCopilotStatus('loading', 'Local LLM thinking...');
+        const systemMessage = getCopilotSystemMessage();
+        let answer = '';
+        let handled = false;
+
+        // 1. Try browser-native window.ai
+        if (window.ai) {
+          try {
+            if (window.ai.languageModel && typeof window.ai.languageModel.create === 'function') {
+              const capabilities = await window.ai.languageModel.capabilities();
+              if (capabilities && capabilities.available !== 'no') {
+                const session = await window.ai.languageModel.create({
+                  systemPrompt: systemMessage
+                });
+                answer = await session.prompt(promptText);
+                handled = true;
+              }
+            } else if (typeof window.ai.createTextSession === 'function') {
+              const session = await window.ai.createTextSession({
+                systemPrompt: systemMessage
+              });
+              answer = await session.prompt(promptText);
+              handled = true;
+            } else if (typeof window.ai.generateText === 'function') {
+              const res = await window.ai.generateText({
+                prompt: promptText,
+                systemPrompt: systemMessage
+              });
+              answer = res.text || res.output || res;
+              handled = true;
+            }
+          } catch (aiErr) {
+            console.warn("Attempt to use window.ai failed, falling back to local Ollama client...", aiErr);
+          }
+        }
+
+        // 2. Fall back to local Ollama client
+        if (!handled) {
+          const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
+          const model = provider === 'gemini' ? 'gemma2' : 'llama3';
+          
+          const res = await fetch(`${url}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: model,
+              system: systemMessage,
+              prompt: promptText,
+              stream: false
+            })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            answer = data.response || 'No response content';
+            handled = true;
+            updateCopilotStatus('connected', `Ollama: ${model}`);
+          } else {
+            throw new Error('Ollama returned status ' + res.status);
+          }
+        } else {
+          updateCopilotStatus('connected', `Local AI: ${provider === 'gemini' ? 'Gemini' : 'Claude'}`);
+        }
+
+        const placeholder = document.getElementById(responseId);
+        if (placeholder) {
+          placeholder.innerHTML = parseMarkdown(answer);
+        }
+      } catch (err) {
+        console.error(err);
+        
+        // 3. Last resort fallback to cloud-hosted GitHub Models if PAT exists
+        try {
+          const copilotToken = localStorage.getItem('gh_copilot_pat') || localStorage.getItem('gh_pat') || '';
+          if (copilotToken) {
+            updateCopilotStatus('loading', 'Falling back to cloud models...');
+            const systemMessage = getCopilotSystemMessage();
+            const res = await fetch('https://models.github.ai/inference/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${copilotToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  { role: 'system', content: systemMessage },
+                  { role: 'user', content: promptText }
+                ],
+                temperature: 0.2
+              })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              const answer = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : 'No response content';
+              const placeholder = document.getElementById(responseId);
+              if (placeholder) {
+                placeholder.innerHTML = parseMarkdown(answer);
+              }
+              updateCopilotStatus('connected', 'Connected (GitHub Models Fallback)');
+              return;
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("Cloud fallback failed:", fallbackErr);
+        }
+
+        const placeholder = document.getElementById(responseId);
+        if (placeholder) {
+          placeholder.innerHTML = `<span style="color: var(--red);">Local LLM Error: ${escapeHtml(err.message)}</span>`;
+        }
+        updateCopilotStatus('disconnected', 'Local LLM Error');
       }
     }
     

@@ -1374,6 +1374,112 @@ Please answer Olaf's questions about these resources and login events, or genera
                     if (!res.ok) throw new Error('Ollama returned status ' + res.status);
                     const data = await res.json();
                     answer = data.response || 'No response content';
+                } else if (providerVal === 'gemini' || providerVal === 'claude') {
+                    const systemMessage = getAssistantSystemMessage(providerText);
+                    let handled = false;
+                    
+                    // 1. Try browser-native window.ai (Gemini Nano or other native prompt API)
+                    if (window.ai) {
+                        try {
+                            if (window.ai.languageModel && typeof window.ai.languageModel.create === 'function') {
+                                const capabilities = await window.ai.languageModel.capabilities();
+                                if (capabilities && capabilities.available !== 'no') {
+                                    const session = await window.ai.languageModel.create({
+                                        systemPrompt: systemMessage
+                                    });
+                                    answer = await session.prompt(text);
+                                    handled = true;
+                                }
+                            } else if (typeof window.ai.createTextSession === 'function') {
+                                const session = await window.ai.createTextSession({
+                                    systemPrompt: systemMessage
+                                });
+                                answer = await session.prompt(text);
+                                handled = true;
+                            } else if (typeof window.ai.generateText === 'function') {
+                                const res = await window.ai.generateText({
+                                    prompt: text,
+                                    systemPrompt: systemMessage
+                                });
+                                answer = res.text || res.output || res;
+                                handled = true;
+                            }
+                        } catch (aiErr) {
+                            console.warn("Attempt to use window.ai failed, falling back to local Ollama client...", aiErr);
+                        }
+                    }
+                    
+                    // 2. Fall back to local Ollama client
+                    if (!handled) {
+                        const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
+                        const model = providerVal === 'gemini' ? 'gemma2' : 'llama3';
+                        try {
+                            const res = await fetch(`${url}/api/generate`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    model: model,
+                                    system: systemMessage,
+                                    prompt: text,
+                                    stream: false
+                                })
+                            });
+                            
+                            if (res.ok) {
+                                const data = await res.json();
+                                answer = data.response || 'No response content';
+                                handled = true;
+                            } else {
+                                throw new Error('Ollama returned status ' + res.status);
+                            }
+                        } catch (ollamaErr) {
+                            console.warn("Local Ollama client fallback failed, checking for GitHub Models fallback...", ollamaErr);
+                            
+                            // 3. Fall back to cloud-hosted GitHub Models if PAT exists
+                            let token = localStorage.getItem('gh_pat');
+                            if (!token) {
+                                try {
+                                    const tokenRes = await fetch('/api/config/tokens');
+                                    const tokenData = await tokenRes.json();
+                                    if (tokenData.github) {
+                                        token = tokenData.github;
+                                        localStorage.setItem('gh_pat', token);
+                                    }
+                                } catch (e) {
+                                    console.error("Auto-fetch GitHub token failed", e);
+                                }
+                            }
+                            
+                            if (token) {
+                                const res = await fetch('https://models.github.ai/inference/chat/completions', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        model: 'gpt-4o',
+                                        messages: [
+                                            { role: 'system', content: systemMessage },
+                                            { role: 'user', content: text }
+                                        ],
+                                        temperature: 0.2
+                                    })
+                                });
+                                
+                                if (res.status === 403) {
+                                    throw new Error('Access denied. Please check if your GitHub Token has Copilot access or permissions for GitHub Models in Settings.');
+                                } else if (!res.ok) {
+                                    throw new Error('API returned status ' + res.status);
+                                }
+                                
+                                const data = await res.json();
+                                answer = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : 'No response content';
+                            } else {
+                                throw new Error(`Local LLM client not found. (Ollama connection error: ${ollamaErr.message}). Please ensure your local Ollama server is running on ${url} or your browser supports window.ai.`);
+                            }
+                        }
+                    }
                 } else {
                     // Try to load GitHub PAT token
                     let token = localStorage.getItem('gh_pat');
