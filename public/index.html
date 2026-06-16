@@ -782,6 +782,10 @@
         async function fetchSpending() {
             try {
                 const res = await fetch('/api/spending');
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 const data = await res.json();
                 
                 if (data.success) {
@@ -814,14 +818,18 @@
                         currencies.forEach(el => el.innerText = budget.currency);
                         
                         const progressPercent = Math.min((parseFloat(budget.spent) / parseFloat(budget.limit)) * 100, 100);
-                        const progressBar = document.getElementById('budget-progress');
-                        progressBar.style.width = `${progressPercent}%`;
-                        if (progressPercent >= 90) {
-                            progressBar.className = 'bg-red-500 h-2.5 rounded-full transition-all duration-500';
-                        } else if (progressPercent >= 75) {
-                            progressBar.className = 'bg-amber-500 h-2.5 rounded-full transition-all duration-500';
-                        } else {
-                            progressBar.className = 'bg-primary h-2.5 rounded-full transition-all duration-500';
+                        const progressBar = document.getElementById('budget-progress-bar');
+                        if (progressBar) {
+                            progressBar.style.width = `${progressPercent}%`;
+                            const pct = document.getElementById('budget-percent');
+                            if (pct) pct.innerText = `${Math.round(progressPercent)}%`;
+                            if (progressPercent >= 90) {
+                                progressBar.className = 'bg-red-500 h-2.5 rounded-full transition-all duration-500';
+                            } else if (progressPercent >= 75) {
+                                progressBar.className = 'bg-amber-500 h-2.5 rounded-full transition-all duration-500';
+                            } else {
+                                progressBar.className = 'bg-primary h-2.5 rounded-full transition-all duration-500';
+                            }
                         }
                     } else {
                         budgetContainer.classList.add('hidden');
@@ -955,13 +963,22 @@
         async function fetchResources() {
             try {
                 const res = await fetch('/api/resources');
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 const data = await res.json();
                 
+                if (!data.success) {
+                    document.getElementById('resources-loader').innerHTML = `<p class="text-red-400">Failed to load resources: ${data.error || 'Unknown error'}</p>`;
+                    return;
+                }
+
                 document.getElementById('resources-loader').classList.add('hidden');
                 const list = document.getElementById('resources-list');
                 list.classList.remove('hidden');
                 
-                if (data.success && data.instances.length > 0) {
+                if (data.success && data.instances && data.instances.length > 0) {
                     window.dashboardState.resources = data.instances;
                     document.getElementById('resource-count').innerText = data.count;
                     
@@ -1332,13 +1349,22 @@
         async function fetchLogins() {
             try {
                 const res = await fetch('/api/logins');
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 const data = await res.json();
+
+                if (!data.success) {
+                    document.getElementById('logins-loader').innerHTML = `<p class="text-red-400">Failed to load logins: ${data.error || 'Unknown error'}</p>`;
+                    return;
+                }
                 
                 document.getElementById('logins-loader').classList.add('hidden');
                 const list = document.getElementById('logins-list');
                 list.classList.remove('hidden');
                 
-                if (data.success && data.logins.length > 0) {
+                if (data.success && data.logins && data.logins.length > 0) {
                     window.dashboardState.logins = data.logins;
                     document.getElementById('login-count').innerText = data.count;
                     
@@ -1530,7 +1556,7 @@
                     const k8sAwsContext = document.getElementById('k8s-aws-context');
                     if (k8sAwsContext) k8sAwsContext.innerText = data.context || 'k3d-review-cluster';
 
-                    const helloAppPod = (data.pods || []).find(p => p.metadata.name.startsWith('hello-deployment') && p.metadata.namespace === 'review-app');
+                    const helloAppPod = (data.pods || []).find(p => p.metadata && p.metadata.name && p.metadata.name.startsWith('hello-deployment') && p.metadata.namespace === 'review-app');
                     const k8sAwsAppBadge = document.getElementById('k8s-aws-app-badge');
                     if (k8sAwsAppBadge && helloAppPod) {
                         const phase = helloAppPod.status.phase;
@@ -1653,7 +1679,7 @@
                         podsList.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-muted-foreground italic">No pods detected.</td></tr>';
                     }
                     
-                    const helloAppPod = pods.find(p => p.metadata.name.startsWith('hello-deployment') && p.metadata.namespace === 'review-app');
+                    const helloAppPod = pods.find(p => p.metadata && p.metadata.name && p.metadata.name.startsWith('hello-deployment') && p.metadata.namespace === 'review-app');
                     const helloAppStatus = document.getElementById('k8s-app-status');
                     if (helloAppPod) {
                         const phase = helloAppPod.status.phase;
