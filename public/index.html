@@ -783,7 +783,7 @@
             try {
                 const res = await fetch('/api/spending');
                 if (res.status === 401) {
-                    window.location.href = '/login.html';
+                    // Not authenticated - the SSO Login button is at the top of the page
                     return;
                 }
                 const data = await res.json();
@@ -964,7 +964,8 @@
             try {
                 const res = await fetch('/api/resources');
                 if (res.status === 401) {
-                    window.location.href = '/login.html';
+                    document.getElementById('resources-loader').innerHTML =
+                        `<p class="text-amber-400 text-sm">Not authenticated. Click <strong>AWS SSO Login</strong> above to load resources.</p>`;
                     return;
                 }
                 const data = await res.json();
@@ -1350,7 +1351,8 @@
             try {
                 const res = await fetch('/api/logins');
                 if (res.status === 401) {
-                    window.location.href = '/login.html';
+                    document.getElementById('logins-loader').innerHTML =
+                        `<p class="text-amber-400 text-sm">Not authenticated. Click <strong>AWS SSO Login</strong> above to load login history.</p>`;
                     return;
                 }
                 const data = await res.json();
@@ -1522,15 +1524,25 @@
                 const res = await fetch('/api/k8s/status');
                 
                 const contentType = res.headers.get('content-type') || '';
-                if (res.redirected || !contentType.includes('application/json') || res.status === 401) {
-                    window.location.href = '/login.html';
+                if (res.status === 401 || (res.redirected || !contentType.includes('application/json'))) {
+                    if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                    loader.classList.add('hidden');
+                    if (errorState) {
+                        document.getElementById('k8s-error-msg').innerText = 'Not authenticated. Use the AWS SSO Login button.';
+                        errorState.classList.remove('hidden');
+                    }
                     return;
                 }
                 
                 const data = await res.json();
                 
                 if (data && data.success === false && (data.error || '').includes('Unauthorized')) {
-                    window.location.href = '/login.html';
+                    if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                    loader.classList.add('hidden');
+                    if (errorState) {
+                        document.getElementById('k8s-error-msg').innerText = 'Not authenticated. Use the AWS SSO Login button.';
+                        errorState.classList.remove('hidden');
+                    }
                     return;
                 }
                 
