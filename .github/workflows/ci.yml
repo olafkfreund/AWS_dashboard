@@ -65,7 +65,7 @@ jobs:
       - name: Install and Run Trivy FS Scan
         run: |
           set -euo pipefail
-          TRIVY_VERSION="0.50.0"
+          TRIVY_VERSION="0.70.0"
           curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | tar xz -C /tmp trivy
           /tmp/trivy fs . \
             --severity CRITICAL,HIGH \
