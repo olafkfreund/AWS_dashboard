@@ -157,12 +157,12 @@
         <!-- Central Navigation Tabs -->
         <div class="flex justify-center mb-8">
             <div class="bg-card text-card-foreground border border-border flex items-center p-1.5 space-x-1 rounded-lg shadow-sm">
-                <a href="#" onclick="showView('aws'); return false;" id="nav-aws" class="px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all">AWS Overview</a>
-                <a href="#" onclick="showView('projects'); return false;" id="nav-projects" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">My Projects</a>
+                <a href="javascript:void(0)" onclick="showView('aws')" id="nav-aws" class="px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all">AWS Overview</a>
+                <a href="javascript:void(0)" onclick="showView('projects')" id="nav-projects" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">My Projects</a>
                 <a href="gitlab/index.html" id="nav-gitlab" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">GitLab</a>
                 <a href="github/index.html" id="nav-github" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">GitHub</a>
-                <a href="#" onclick="showView('k8s'); return false;" id="nav-k8s" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">Kubernetes</a>
-                <a href="#" onclick="showView('settings'); return false;" id="nav-settings" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">Settings</a>
+                <a href="javascript:void(0)" onclick="showView('k8s')" id="nav-k8s" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">Kubernetes</a>
+                <a href="javascript:void(0)" onclick="showView('settings')" id="nav-settings" class="px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all">Settings</a>
                 <div class="w-px h-6 bg-border mx-2"></div>
                 <button id="theme-toggle-btn" onclick="toggleTheme()" class="hover:bg-muted text-muted-foreground hover:text-foreground p-2 rounded-md transition-colors flex items-center justify-center w-9 h-9" title="Toggle theme">
                     <i class="fa-solid fa-moon text-base" id="theme-toggle-icon"></i>
@@ -800,33 +800,27 @@
 
         // Navigation UI logic
         function showView(viewId) {
-            document.getElementById('view-aws').style.display = viewId === 'aws' ? 'block' : 'none';
-            document.getElementById('view-settings').style.display = viewId === 'settings' ? 'block' : 'none';
-            document.getElementById('view-projects').style.display = viewId === 'projects' ? 'block' : 'none';
-            document.getElementById('view-k8s').style.display = viewId === 'k8s' ? 'block' : 'none';
-            
-            // Update active state
-            document.getElementById('nav-aws').className = viewId === 'aws' 
-                ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
-                : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
-            
-            document.getElementById('nav-projects').className = viewId === 'projects' 
-                ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
-                : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
-                
-            document.getElementById('nav-settings').className = viewId === 'settings' 
-                ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
-                : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
-                
-            if (document.getElementById('nav-k8s')) {
-                document.getElementById('nav-k8s').className = viewId === 'k8s'
-                    ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
-                    : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
+            try {
+                ['aws','settings','projects','k8s'].forEach(id => {
+                    const el = document.getElementById('view-' + id);
+                    if (el) el.style.display = (viewId === id) ? 'block' : 'none';
+                });
+
+                // Update active nav tab styling
+                ['aws','projects','settings','k8s'].forEach(id => {
+                    const nav = document.getElementById('nav-' + id);
+                    if (!nav) return;
+                    nav.className = (viewId === id)
+                        ? 'px-5 py-2 rounded-md bg-secondary text-secondary-foreground font-medium shadow-sm transition-all'
+                        : 'px-5 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all';
+                });
+
+                if (viewId === 'settings') loadSettings();
+                if (viewId === 'projects') refreshProjects();
+                if (viewId === 'k8s') refreshK8sData();
+            } catch(e) {
+                console.error('showView error:', e);
             }
-                
-            if (viewId === 'settings') loadSettings();
-            if (viewId === 'projects') refreshProjects();
-            if (viewId === 'k8s') refreshK8sData();
         }
 
         async function loadSettings() {
