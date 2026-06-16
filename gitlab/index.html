@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard</title>
+  <meta name="description" content="Dashboard">
+  <meta name="author" content="olafkfreund">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="./assets/images/logo.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Outfit:wght@100..900&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="./assets/css/style.css?v=1781617661116">
+</head>
+<body>
+
+    <!-- Central Navigation Tabs -->
+    <div style="display: flex; justify-content: center; padding-top: 16px; padding-bottom: 16px; background-color: var(--bg-medium); z-index: 1000; position: relative; width: 100%;">
+        <div style="display: flex; padding: 4px; border-radius: 12px; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); gap: 4px;">
+            <a href="../index.html" style="padding: 8px 24px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">AWS Overview</a>
+            <a href="../gitlab/index.html" style="padding: 8px 24px; border-radius: 8px; background: #1e293b; color: white; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">GitLab</a>
+            <a href="../github/index.html" style="padding: 8px 24px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">GitHub</a>
+            <a href="../index.html?view=settings" style="padding: 8px 24px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-weight: 500; font-family: 'Inter', sans-serif;">Settings</a>
+        </div>
+    </div>
+    
+  
+<!-- Main Layout Wrapper -->
+<div class="sidebar">
+  
+
+  <ul class="nav-links">
+    <li class="nav-item active" data-view="overview">
+      <a href="#overview"><i class="fa-solid fa-chart-simple"></i> Overview</a>
+    </li>
+    <li class="nav-item" data-view="pipelines">
+      <a href="#pipelines"><i class="fa-solid fa-circle-notch"></i> Pipelines & runs</a>
+    </li>
+    <li class="nav-item" data-view="mrs">
+      <a href="#mrs"><i class="fa-solid fa-code-merge"></i> Merge Requests</a>
+    </li>
+    <li class="nav-item" data-view="issues">
+      <a href="#issues"><i class="fa-solid fa-circle-dot"></i> Issues</a>
+    </li>
+    <li class="nav-item" data-view="security">
+      <a href="#security"><i class="fa-solid fa-shield-halved"></i> Security alerts</a>
+    </li>
+    <li class="nav-item" data-view="stars">
+      <a href="#stars"><i class="fa-solid fa-star"></i> Project Stars</a>
+    </li>
+    <li class="nav-item" data-view="boards">
+      <a href="#boards"><i class="fa-solid fa-table-list"></i> Boards & Epics</a>
+    </li>
+    <li class="nav-item" data-view="metrics">
+      <a href="#metrics"><i class="fa-solid fa-chart-line"></i> Metrics</a>
+    </li>
+    <li class="nav-item" data-view="automation">
+      <a href="#automation"><i class="fa-solid fa-robot"></i> Automations</a>
+    </li>
+    <li class="nav-item" data-view="settings">
+      <a href="#settings"><i class="fa-solid fa-gear"></i> Settings</a>
+    </li>
+  </ul>
+
+  <div class="sidebar-footer">
+    <div class="theme-toggle-container">
+      <span><i class="fa-solid fa-circle-half-stroke"></i> Theme Mode</span>
+      <label class="switch">
+        <input type="checkbox" id="theme-toggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="agent-status-card">
+      <div class="agent-status-header">
+        <span><i class="fa-solid fa-terminal"></i> WebMCP AGENT</span>
+        <span class="status-dot" id="agent-status-dot"></span>
+      </div>
+      <div id="agent-status-text">Inactive (Chrome flag required)</div>
+    </div>
+  </div>
+</div>
+
+<div class="main-content">
+  <div class="top-bar">
+    <div class="flex-align">
+      <h2 id="current-view-title">Overview</h2>
+      <button class="btn btn-icon btn-sm" id="btn-refresh" title="Refresh dashboard data"><i class="fa-solid fa-rotate"></i></button>
+    </div>
+
+    <div class="global-search-wrapper" id="global-search-container" style="display: none; flex-grow: 1; max-width: 400px; margin: 0 24px; position: relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--fg-secondary); font-size: 13px;"></i>
+      <input type="text" id="global-search-input" class="form-control" placeholder="Search issues, MRs, pipelines..." style="padding-left: 36px; padding-right: 32px; font-size: 13px; height: 36px; padding-top: 0; padding-bottom: 0; line-height: 36px;">
+      <button id="btn-clear-search" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--fg-secondary); cursor: pointer; display: none; font-size: 20px; font-weight: bold; padding: 0; line-height: 1;">&times;</button>
+    </div>
+    
+    <div class="user-profile" id="user-profile-header" style="display: none;">
+      <div class="user-info">
+        <span class="user-name" id="user-display-name">Username</span>
+        <span class="user-role" id="user-login">@login</span>
+      </div>
+      <img src="" class="user-avatar" id="user-avatar-img" alt="User Avatar">
+      <button class="btn btn-icon" id="btn-logout-header" title="Disconnect Token"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </div>
+
+  <div class="content-body">
+    <!-- View: Setup/Auth (Shown when token is missing) -->
+    <section id="view-setup" class="view-section">
+      <div class="auth-panel card card-accent-orange">
+        <i class="fa-solid fa-key auth-logo"></i>
+        <h2 class="mb-4">Connect to GitLab</h2>
+        <p class="mb-6">
+          Huginn runs entirely in your browser and accesses the GitLab API client-side.
+          To get started, provide your GitLab Instance URL and a Personal Access Token (PAT) with access to your projects, pipelines, merge requests, and security details. Your credentials are stored securely in your browser's local storage.
+        </p>
+        
+        <form id="auth-form" onsubmit="return false;">
+          <div class="form-group text-left mb-4">
+            <label class="form-label" for="instance-url-input">GitLab Instance URL</label>
+            <input type="url" id="instance-url-input" class="form-control" value="https://gitlab.com" placeholder="https://gitlab.com or custom self-hosted domain" required>
+          </div>
+          <div class="form-group text-left">
+            <label class="form-label" for="pat-input">Personal Access Token (PAT)</label>
+            <input type="password" id="pat-input" class="form-control" placeholder="glpat-xxxxxxxxxxxxxxxxxxxx" required>
+            <p class="card-desc">Required scopes: <code>api</code>, <code>read_user</code>, <code>read_api</code></p>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-validate-token">
+            <i class="fa-solid fa-plug"></i> Connect Account
+          </button>
+        </form>
+        
+        <div id="oauth-login-container" style="display: none; margin-top: 24px; border-top: 2px solid var(--border-color); padding-top: 24px;">
+          <p class="mb-4" style="font-size: 13px; color: var(--fg-secondary);">Or login automatically using your local bridge app:</p>
+          <button type="button" class="btn btn-primary" id="btn-oauth-login" style="background-color: var(--green); color: #fbf1c7;">
+            <i class="fa-brands fa-gitlab"></i> Login with GitLab
+          </button>
+        </div>
+        
+        <div id="auth-error-msg" class="badge badge-danger mt-4" style="display: none; padding: 10px; width: 100%;"></div>
+      </div>
+    </section>
+
+    <!-- View: Search Results -->
+    <section id="view-search-results" class="view-section">
+      <div class="mb-6">
+        <h3>Search Results</h3>
+        <p class="card-desc">Showing matches for query: <strong id="search-query-display" style="color: var(--orange);">""</strong></p>
+      </div>
+
+      <!-- Repositories (Projects) Results -->
+      <div class="card mb-6" id="search-section-repos" style="display: none;">
+        <h4 class="mb-4"><i class="fa-solid fa-book-bookmark" style="color: var(--blue);"></i> Projects</h4>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Description</th>
+                <th>Star Count</th>
+                <th>Forks</th>
+              </tr>
+            </thead>
+            <tbody id="search-repos-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Merge Requests Results -->
+      <div class="card mb-6" id="search-section-prs" style="display: none;">
+        <h4 class="mb-4"><i class="fa-solid fa-code-merge" style="color: var(--green);"></i> Merge Requests</h4>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Merge Request</th>
+                <th>Project</th>
+                <th>Author</th>
+                <th>Status</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="search-prs-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Issues Results -->
+      <div class="card mb-6" id="search-section-issues" style="display: none;">
+        <h4 class="mb-4"><i class="fa-solid fa-circle-dot" style="color: var(--orange);"></i> Issues</h4>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Issue</th>
+                <th>Project</th>
+                <th>State</th>
+                <th>Author</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="search-issues-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Workflow Runs (Pipelines) Results -->
+      <div class="card mb-6" id="search-section-workflows" style="display: none;">
+        <h4 class="mb-4"><i class="fa-solid fa-circle-notch" style="color: var(--yellow);"></i> Project Pipelines</h4>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Pipeline ID</th>
+                <th>Project</th>
+                <th>Branch / Ref</th>
+                <th>Status</th>
+                <th>Triggered By</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="search-workflows-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="search-no-results" style="display: none; text-align: center; padding: 48px; border: 2px dashed var(--border-color); border-radius: 8px;">
+        <i class="fa-solid fa-face-frown" style="font-size: 32px; color: var(--fg-secondary); margin-bottom: 12px;"></i>
+        <p style="color: var(--fg-secondary); margin-bottom: 0;">No matches found in issues, merge requests, pipelines, or projects.</p>
+      </div>
+    </section>
+
+    <!-- View: Overview -->
+    <section id="view-overview" class="view-section active">
+      <div class="grid-container">
+        <div class="card card-accent-blue">
+          <div class="card-title">Running Pipelines <i class="fa-solid fa-circle-notch" style="color: var(--yellow);"></i></div>
+          <div class="card-value" id="stat-running-workflows">0</div>
+          <div class="card-desc">Active GitLab CI/CD pipelines</div>
+        </div>
+        <div class="card card-accent-green">
+          <div class="card-title">Active Merge Requests <i class="fa-solid fa-code-merge" style="color: var(--green);"></i></div>
+          <div class="card-value" id="stat-active-prs">0</div>
+          <div class="card-desc">Open MRs needing attention</div>
+        </div>
+        <div class="card card-accent-yellow">
+          <div class="card-title">Open Issues <i class="fa-solid fa-circle-dot" style="color: var(--orange);"></i></div>
+          <div class="card-value" id="stat-open-issues">0</div>
+          <div class="card-desc">Assigned or project issues</div>
+        </div>
+        <div class="card card-accent-red">
+          <div class="card-title">Security Warnings <i class="fa-solid fa-shield-halved" style="color: var(--red);"></i></div>
+          <div class="card-value" id="stat-security-alerts">0</div>
+          <div class="card-desc">Vulnerabilities and SAST alerts</div>
+        </div>
+        <div class="card card-accent-orange">
+          <div class="card-title">Total Project Stars <i class="fa-solid fa-star" style="color: var(--yellow);"></i></div>
+          <div class="card-value" id="stat-total-stars">0</div>
+          <div class="card-desc">Across all joined projects</div>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <div style="padding: 20px; border-bottom: 2px solid var(--border-color); font-weight: 700; font-size: 16px;">
+          <i class="fa-solid fa-clock-rotate-left"></i> Recent Pipeline Activities
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Pipeline ID</th>
+              <th>Triggered By</th>
+              <th>Ref / Branch</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="overview-workflows-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">No running pipelines found. Connect your token to fetch active actions.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- View: Pipelines -->
+    <section id="view-pipelines" class="view-section">
+      <div class="mb-6 flex-between">
+        <div>
+          <h3>All Project Pipelines</h3>
+          <p class="card-desc">View latest builds, run new pipelines, and cancel active jobs.</p>
+        </div>
+        <div class="flex-align">
+          <label class="form-label" style="margin-bottom: 0;">Project:</label>
+          <select id="workflows-repo-select" class="form-control" style="width: 250px;">
+            <option value="">Select a project...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline</th>
+              <th>Branch / Ref</th>
+              <th>Trigger Event</th>
+              <th>Status</th>
+              <th>Last Run Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="workflows-runs-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">Select a project above to display pipelines.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- View: Merge Requests -->
+    <section id="view-mrs" class="view-section">
+      <div class="mb-6">
+        <h3>Active Merge Requests</h3>
+        <p class="card-desc">Manage merge requests across all your GitLab projects.</p>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Title / MR Info</th>
+              <th>Author</th>
+              <th>Reviewers</th>
+              <th>Merge Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="prs-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">Connect token to load active merge requests.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- View: Issues -->
+    <section id="view-issues" class="view-section">
+      <div class="mb-6 flex-between">
+        <div>
+          <h3>Open Project Issues</h3>
+          <p class="card-desc">Review and triage issues grouped by project.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-create-issue-modal"><i class="fa-solid fa-plus"></i> New Issue</button>
+      </div>
+
+      <div id="issues-list-container">
+        <div class="card" style="text-align: center; color: var(--fg-secondary);">
+          Connect token to fetch issues.
+        </div>
+      </div>
+    </section>
+
+    <!-- View: Security -->
+    <section id="view-security" class="view-section">
+      <div class="mb-6">
+        <h3>Security Scans & Vulnerabilities</h3>
+        <p class="card-desc">Review security vulnerability warnings and scanner reports (SAST/DAST).</p>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Vulnerability Details</th>
+              <th>Severity</th>
+              <th>Tool / Scanner</th>
+              <th>Triggered On</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="security-alerts-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">Connect token to pull vulnerability warnings.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- View: Stars -->
+    <section id="view-stars" class="view-section">
+      <div class="mb-6">
+        <h3>Project Stars & Analytics</h3>
+        <p class="card-desc">Sort and organize projects by star count, forks, and updates.</p>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Project Name</th>
+              <th>Description</th>
+              <th>Path</th>
+              <th>Forks</th>
+              <th>Last Updated</th>
+              <th>Stars</th>
+            </tr>
+          </thead>
+          <tbody id="stars-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">Connect token to view project statistics.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- View: Boards -->
+    <section id="view-boards" class="view-section">
+      <div class="mb-6 flex-align" style="justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3>GitLab Issue Boards</h3>
+          <p class="card-desc">Manage kanban lists, cards status, and update tasks stages using GraphQL.</p>
+        </div>
+        <div class="flex-align" style="gap: 12px;">
+          <label class="form-label" for="project-select" style="margin-bottom: 0; font-size: 13px;">Active Project:</label>
+          <select id="project-select" class="form-control" style="margin: 0; padding: 6px 12px; font-size: 13px; max-width: 250px;">
+            <option value="">Loading projects...</option>
+          </select>
+          <label class="form-label" for="board-select" style="margin-bottom: 0; font-size: 13px;">Active Board:</label>
+          <select id="board-select" class="form-control" style="margin: 0; padding: 6px 12px; font-size: 13px; max-width: 250px;">
+            <option value="">Select a board...</option>
+          </select>
+          <button class="btn btn-sm btn-primary" id="btn-refresh-projects" style="margin: 0; padding: 6px 12px;"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+
+      <div class="card card-accent-blue mb-6" id="project-info-card" style="display: none;">
+        <h4 id="project-title-header" style="margin: 0 0 6px 0; color: var(--blue);"></h4>
+        <p class="card-desc" id="project-desc-header" style="margin: 0;"></p>
+      </div>
+
+      <div class="table-container" id="project-items-container" style="display: none;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 60px;">Type</th>
+              <th>Task / Item Title</th>
+              <th>State</th>
+              <th style="width: 200px;">Board List (Status)</th>
+            </tr>
+          </thead>
+          <tbody id="project-items-tbody">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+      
+      <div id="project-loading-indicator" style="text-align: center; padding: 40px; color: var(--fg-secondary);">
+        <i class="fa-solid fa-spinner fa-spin fa-2xl"></i>
+        <p style="margin-top: 12px;">Please connect your GitLab account to load projects.</p>
+      </div>
+    </section>
+
+    <!-- View: Metrics -->
+    <section id="view-metrics" class="view-section">
+      <div class="mb-6 flex-align" style="justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3>Metrics & KPI Dashboard</h3>
+          <p class="card-desc">Track engineering excellence and team delivery performance indicators.</p>
+        </div>
+        <div>
+          <button class="btn btn-sm btn-primary" id="btn-refresh-metrics" style="margin: 0; padding: 6px 12px;"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+
+      <div class="grid-container">
+        <!-- Card 1: Lead Time -->
+        <div class="card card-accent-red">
+          <div class="card-title">
+            Lead Time
+            <i class="fa-solid fa-clock-rotate-left" style="color: var(--red); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-lead-time">--</div>
+          <p class="card-desc">Total time from customer request/creation until final delivery (days).</p>
+        </div>
+
+        <!-- Card 2: Cycle Time -->
+        <div class="card card-accent-green">
+          <div class="card-title">
+            Cycle Time
+            <i class="fa-solid fa-user-gear" style="color: var(--green); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-cycle-time">--</div>
+          <p class="card-desc">Total time from when work starts on a MR until the point where it is merged (days).</p>
+        </div>
+
+        <!-- Card 3: Test Automation Coverage -->
+        <div class="card card-accent-yellow">
+          <div class="card-title">
+            Pipeline Test Coverage
+            <i class="fa-solid fa-code" style="color: var(--yellow); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-test-coverage">80%</div>
+          <p class="card-desc">GitLab CI/CD parsed test coverage percentage.</p>
+          <div style="margin-top: 16px;">
+            <input type="range" id="input-test-coverage" min="0" max="100" value="80" class="form-range">
+          </div>
+        </div>
+
+        <!-- Card 4: Work Item Age -->
+        <div class="card card-accent-blue">
+          <div class="card-title">
+            Work Item Age
+            <i class="fa-solid fa-route" style="color: var(--blue); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-item-age">--</div>
+          <p class="card-desc">Time needed to satisfy the customer with new and competitive products (days).</p>
+        </div>
+
+        <!-- Card 5: Delivery Predictability -->
+        <div class="card card-accent-orange">
+          <div class="card-title">
+            Delivery Predictability
+            <i class="fa-solid fa-chart-line" style="color: var(--orange); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-predictability">--</div>
+          <p class="card-desc">Measures how much committed work is actually completed.</p>
+        </div>
+
+        <!-- Card 6: Blocked Time -->
+        <div class="card card-accent-red">
+          <div class="card-title">
+            Blocked Time
+            <i class="fa-solid fa-ban" style="color: var(--red); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-blocked-time">--</div>
+          <p class="card-desc">Percentage of time work items are blocked.</p>
+        </div>
+
+        <!-- Card 7: Defect Escape Rate -->
+        <div class="card card-accent-purple">
+          <div class="card-title">
+            Defect Escape Rate
+            <span style="color: var(--purple); display: inline-flex; align-items: center;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18M15 3v18" /></svg>
+            </span>
+          </div>
+          <div class="card-value" id="metric-defect-escape">15%</div>
+          <p class="card-desc">Defects found after release vs before release.</p>
+          <div style="margin-top: 16px;">
+            <input type="range" id="input-defect-escape" min="0" max="100" value="15" class="form-range">
+          </div>
+        </div>
+
+        <!-- Card 8: Defect Root Cause -->
+        <div class="card card-accent-aqua">
+          <div class="card-title">
+            Defect Root Cause
+            <i class="fa-solid fa-handshake" style="color: var(--aqua); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-defect-root">--</div>
+          <p class="card-desc">Items that require rework due to upstream defects (bugs count).</p>
+        </div>
+
+        <!-- Card 9: Average Velocity -->
+        <div class="card card-accent-fg">
+          <div class="card-title">
+            Average Velocity
+            <i class="fa-solid fa-gauge-high" style="color: var(--fg-secondary); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-avg-velocity">45 SP</div>
+          <p class="card-desc">Average story points completed over the last 3-5 iterations.</p>
+          <div style="margin-top: 16px;">
+            <input type="range" id="input-avg-velocity" min="0" max="150" value="45" class="form-range">
+          </div>
+        </div>
+
+        <!-- Card 10: Change Failure Rate -->
+        <div class="card card-accent-orange">
+          <div class="card-title">
+            Change Failure Rate
+            <i class="fa-solid fa-right-left" style="color: var(--orange); font-size: 1.2em;"></i>
+          </div>
+          <div class="card-value" id="metric-change-failure">--</div>
+          <p class="card-desc">Measure of CI consistency (pipeline runs failure rate).</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- View: Automation -->
+    <section id="view-automation" class="view-section">
+      <div class="mb-6">
+        <h3>Automations & Agent Interface</h3>
+        <p class="card-desc">Expose controls, run routine scripts, and hook up autonomous agents.</p>
+      </div>
+
+      <div class="grid-container">
+        <div class="card card-accent-yellow">
+          <h4>Auto-label Draft MRs</h4>
+          <p class="card-desc mb-4">Labels merge requests with 'WIP' if they have draft status or are unresolved.</p>
+          <button class="btn btn-sm btn-primary" onclick="runMRLabeler()"><i class="fa-solid fa-tags"></i> Run Labeler</button>
+        </div>
+        <div class="card card-accent-red">
+          <h4>Close Stale Issues</h4>
+          <p class="card-desc mb-4">Scans issues that haven't had any activity in 30 days and suggests closing them.</p>
+          <button class="btn btn-sm" onclick="runStaleIssueScanner()"><i class="fa-solid fa-box-archive"></i> Scan Issues</button>
+        </div>
+        <div class="card card-accent-blue" style="grid-column: span 2;">
+          <h4>Local Ollama Agent Terminal</h4>
+          <p class="card-desc mb-4">Connect to your local Ollama API to run code/issue generation assists.</p>
+          
+          <div class="flex-align mb-4">
+            <input type="text" id="ollama-url" class="form-control" value="http://localhost:11434" style="padding: 6px 12px; font-size: 12px; max-width: 250px;">
+            <button class="btn btn-sm btn-primary" id="btn-connect-ollama"><i class="fa-solid fa-plug"></i> Connect</button>
+            <select id="ollama-model-select" class="form-control" style="padding: 6px 12px; font-size: 12px; max-width: 200px; display: none;">
+              <!-- Loaded dynamically -->
+            </select>
+          </div>
+
+          <div id="ollama-terminal-interface" style="display: none;">
+            <div id="ollama-chat-history" style="background-color: var(--bg-soft); border: 2px solid var(--border-color); border-radius: 6px; padding: 12px; height: 180px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; margin-bottom: 12px; line-height: 1.5;">
+              <div style="color: var(--fg-secondary);">Connected to Ollama! Ask anything...</div>
+            </div>
+            <div class="flex-align">
+              <input type="text" id="ollama-chat-input" class="form-control" placeholder="Ask Llama to write an issue description..." style="padding: 10px 14px; font-size: 13px;">
+              <button class="btn btn-sm btn-primary" id="btn-send-ollama"><i class="fa-solid fa-paper-plane"></i> Send</button>
+            </div>
+          </div>
+          
+          <div id="ollama-cors-error" style="display: none; font-size: 12px; color: var(--red); margin-top: 10px; line-height: 1.5;">
+            <i class="fa-solid fa-triangle-exclamation"></i> <strong>CORS Blocked or Server Offline:</strong><br>
+            Please make sure Ollama is running and launched with CORS enabled so the browser can make requests to it. Run this command in your terminal and refresh:
+            <pre style="margin-top: 6px; background-color: var(--bg-soft); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">OLLAMA_ORIGINS="*" ollama serve</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-accent-orange mt-4">
+        <h4><i class="fa-solid fa-circle-info"></i> How to Control with Autonomous Agents</h4>
+        <p class="card-desc mb-4" style="font-size: 14px; color: var(--fg-primary); line-height: 1.6;">
+          Huginn implements the **WebMCP standard**! If you are using a browser assistant (like the Gemini Chrome extension or Copilot Sidecar with WebMCP support enabled), the page automatically registers its client-side capabilities.
+          <br><br>
+          An AI agent viewing this tab can natively read your projects list, fetch merge requests, and help triage issues without requiring you to share token credentials outside this browser tab context.
+        </p>
+        <div class="table-container" style="box-shadow: none; border-color: var(--border-color); margin-bottom: 0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Registered WebMCP Tool</th>
+                <th>Parameters</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>list_loaded_projects</code></td>
+                <td>None</td>
+                <td>Returns a list of all projects loaded by the user.</td>
+              </tr>
+              <tr>
+                <td><code>list_merge_requests</code></td>
+                <td>None</td>
+                <td>Returns active GitLab merge requests, details, checks status.</td>
+              </tr>
+              <tr>
+                <td><code>list_issues</code></td>
+                <td>None</td>
+                <td>Lists open project issues grouped by project.</td>
+              </tr>
+              <tr>
+                <td><code>trigger_pipeline_run</code></td>
+                <td><code>project_id, ref</code></td>
+                <td>Triggers a pipeline run for a project.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- View: Settings -->
+    <section id="view-settings" class="view-section">
+      <div class="mb-6">
+        <h3>Settings & Account Configuration</h3>
+        <p class="card-desc">Configure tokens, instance URLs, dashboard refresh periods, and theme profiles.</p>
+      </div>
+
+      <div class="card mb-6">
+        <h4 class="mb-4"><i class="fa-solid fa-shield-halved"></i> GitLab Access Settings</h4>
+        <div class="form-group mb-4">
+          <label class="form-label">Active Instance URL</label>
+          <div class="flex-align">
+            <span class="mono-text" id="settings-instance-preview">https://gitlab.com</span>
+          </div>
+        </div>
+        <div class="form-group mb-4">
+          <label class="form-label">Active Connection Token</label>
+          <div class="flex-align">
+            <span class="badge badge-success" id="settings-token-badge">Connected</span>
+            <span class="mono-text" id="settings-token-preview">glpat-...xxxx</span>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-disconnect-token"><i class="fa-solid fa-trash-can"></i> Disconnect & Clear Local Cache</button>
+      </div>
+
+      <div class="card mb-6">
+        <h4 class="mb-4"><i class="fa-solid fa-robot"></i> Assistant & LLM Configuration</h4>
+        <div class="form-group mb-3">
+          <label class="form-label" for="settings-copilot-provider">LLM Provider</label>
+          <select id="settings-copilot-provider" class="form-control" style="max-width: 300px;">
+            <option value="github">GitHub Models (GPT-4o)</option>
+            
+      <option value="ollama">Ollama (Local LLM)</option>
+      <option value="github-copilot" selected>GitHub Copilot</option>
+      <option value="gitlab-duo">GitLab Duo</option>
+      <option value="aws-q">AWS Q (Cloud)</option>
+    
+          </select>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label" for="settings-copilot-pat">Dedicated GitHub PAT (Optional)</label>
+          <input type="password" id="settings-copilot-pat" class="form-control" style="max-width: 400px;" placeholder="ghp_... (Overrides dashboard token)">
+          <p style="font-size: 11px; color: var(--fg-secondary); margin-top: 4px; margin-bottom: 0;">Use this if your default connection does not have permissions for GitHub Copilot or Models.</p>
+        </div>
+        <div class="form-group mb-3" style="display: flex; gap: 16px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 200px;">
+            <label class="form-label" for="settings-copilot-ollama-url">Ollama URL</label>
+            <input type="text" id="settings-copilot-ollama-url" class="form-control" placeholder="http://localhost:11434">
+          </div>
+          <div style="flex: 1; min-width: 200px;">
+            <label class="form-label" for="settings-copilot-ollama-model">Ollama Model</label>
+            <input type="text" id="settings-copilot-ollama-model" class="form-control" placeholder="llama3 or mistral">
+          </div>
+        </div>
+        <div class="flex-align" style="gap: 12px;">
+          <button class="btn btn-primary btn-sm" id="btn-save-settings-copilot"><i class="fa-solid fa-floppy-disk"></i> Save Assistant Settings</button>
+          <span id="settings-copilot-status" style="font-size: 12px; color: var(--green); font-weight: bold;"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4 class="mb-4"><i class="fa-solid fa-sliders"></i> Interface Options</h4>
+        <div class="form-group">
+          <label class="form-label" for="select-refresh-rate">Auto-Refresh Interval</label>
+          <select id="select-refresh-rate" class="form-control" style="max-width: 200px;">
+            <option value="0">Never (Manual)</option>
+            <option value="60">Every 1 minute</option>
+            <option value="300" selected>Every 5 minutes</option>
+            <option value="600">Every 10 minutes</option>
+          </select>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Modal: Create Issue -->
+<div class="modal-overlay" id="modal-create-issue">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Create New GitLab Issue</h3>
+      <button class="modal-close" id="btn-close-issue-modal">&times;</button>
+    </div>
+    <form id="create-issue-form" onsubmit="return false;">
+      <div class="form-group">
+        <label class="form-label" for="issue-repo-select">Target Project</label>
+        <select id="issue-repo-select" class="form-control" required>
+          <!-- Loaded dynamically -->
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="issue-title-input">Title</label>
+        <input type="text" id="issue-title-input" class="form-control" placeholder="Describe the issue" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="issue-body-textarea">Description</label>
+        <textarea id="issue-body-textarea" class="form-control" rows="5" placeholder="Include details or steps to reproduce..." style="resize: vertical;"></textarea>
+      </div>
+      <div class="text-right">
+        <button type="button" class="btn" id="btn-cancel-issue" style="margin-right: 8px;">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="btn-submit-issue">Create Issue</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast Notifications Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Floating Assistant Button -->
+<button class="copilot-badge-btn" id="copilot-chat-btn" title="Ask Duo Assistant">
+  <i class="fa-solid fa-robot"></i>
+</button>
+
+<!-- Duo Chat Popup -->
+<div class="copilot-chat-popup" id="copilot-chat-popup">
+  <div class="copilot-chat-header">
+    <div class="copilot-chat-header-title">
+      <span class="copilot-status-indicator" id="copilot-status-indicator"></span>
+      <i class="fa-solid fa-robot"></i> Duo Assistant
+    </div>
+    <div class="copilot-chat-header-actions">
+      <button class="copilot-chat-header-btn" id="copilot-settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
+      <button class="copilot-chat-header-btn" id="copilot-clear-btn" title="Clear chat history"><i class="fa-solid fa-trash-can"></i></button>
+      <button class="copilot-chat-header-btn" id="copilot-close-btn" title="Minimize"><i class="fa-solid fa-minus"></i></button>
+    </div>
+  </div>
+
+  <!-- LLM Provider Select -->
+  <div class="copilot-chat-provider-select" id="copilot-chat-provider-select" style="padding: 8px 12px; background-color: var(--bg-soft); border-bottom: 2px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;">
+    <span style="font-size: 11px; color: var(--fg-secondary); font-weight: bold;">LLM Provider:</span>
+    <select id="copilot-provider-select" class="form-control" style="font-size: 11px; padding: 2px 6px; height: auto; max-width: 170px; margin: 0; line-height: 1;">
+      
+      <option value="ollama">Ollama (Local LLM)</option>
+      <option value="github-copilot" selected>GitHub Copilot</option>
+      <option value="gitlab-duo">GitLab Duo</option>
+      <option value="aws-q">AWS Q (Cloud)</option>
+    
+    </select>
+  </div>
+
+  <!-- Copilot Settings Panel -->
+  <div class="copilot-chat-settings" id="copilot-chat-settings" style="display: none; padding: 12px; background-color: var(--bg-soft); border-bottom: 2px solid var(--border-color); font-size: 12px; flex-shrink: 0; box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.15);">
+    <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; color: var(--orange);">Local Ollama Settings</div>
+    <div class="form-group mb-2" style="display: flex; gap: 8px;">
+      <div style="flex: 1;">
+        <label class="form-label" style="font-size: 11px; margin-bottom: 4px; display: block; color: var(--fg-primary);">Ollama URL</label>
+        <input type="text" id="copilot-ollama-url" class="form-control" style="padding: 6px; font-size: 11px;" placeholder="http://localhost:11434">
+      </div>
+      <div style="flex: 1;">
+        <label class="form-label" style="font-size: 11px; margin-bottom: 4px; display: block; color: var(--fg-primary);">Ollama Model</label>
+        <input type="text" id="copilot-ollama-model" class="form-control" style="padding: 6px; font-size: 11px;" placeholder="qwen3:14b or gemma4:12b">
+      </div>
+    </div>
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+      <span id="copilot-settings-status" style="font-size: 10px; color: var(--green); font-weight: bold;"></span>
+      <button class="btn btn-sm btn-primary" id="copilot-save-settings-btn" style="padding: 4px 10px; font-size: 11px; background-color: var(--blue); color: var(--bg-medium); border: 1px solid var(--border-color); cursor: pointer;">Save Settings</button>
+    </div>
+  </div>
+
+  
+      <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px 12px; background: var(--bg-soft); border-bottom: 1px solid var(--border-color);">
+          <label for="enable-voice-feedback" style="font-size: 11px; cursor: pointer;">Spoken Feedback</label>
+          <input type="checkbox" id="enable-voice-feedback" style="cursor: pointer;">
+      </div>
+    
+<div class="copilot-chat-body" id="copilot-chat-body">
+    <div class="copilot-chat-msg copilot-chat-msg-bot">
+      <p>Hello! I am your GitLab Duo Assistant.</p>
+      <p>I have live access to your dashboard. Ask me about your projects, open merge requests, issues, or failing pipelines!</p>
+    </div>
+  </div>
+  <div class="copilot-chat-input-area" style="position: relative;">
+
+      <button id="copilot-mic-btn" style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10;">
+          <i class="fa-solid fa-microphone"></i>
+      </button>
+    
+    <input type="text" class="copilot-chat-input" id="copilot-chat-input" style="padding-right: 60px;" placeholder="Query Duo for tasks, jobs, status...">
+    <button class="copilot-chat-send-btn" id="copilot-send-btn" title="Send message"><i class="fa-solid fa-paper-plane"></i></button>
+  </div>
+</div>
+
+
+  <!-- Application Script -->
+  <script src="./assets/js/app.js?v=1781617661116"></script>
+
+    <script>
+      window.addEventListener('load', () => {
+        const micBtn = document.getElementById('copilot-mic-btn');
+        const voiceFeedbackCheck = document.getElementById('enable-voice-feedback');
+        const chatInput = document.getElementById('copilot-chat-input');
+        const sendBtn = document.getElementById('copilot-send-btn');
+        
+        if(micBtn && chatInput && sendBtn) {
+            let recognition = null;
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                
+                recognition.onstart = function() { micBtn.style.color = '#ef4444'; };
+                recognition.onresult = function(event) {
+                    chatInput.value = event.results[0][0].transcript;
+                    sendBtn.click();
+                };
+                recognition.onerror = function() { micBtn.style.color = '#94a3b8'; };
+                recognition.onend = function() { micBtn.style.color = '#94a3b8'; };
+            }
+            
+            micBtn.addEventListener('click', () => {
+                if (recognition) recognition.start();
+                else alert('Speech recognition not supported in this browser.');
+            });
+        }
+        
+        // Intercept DOM node insertions in the chat body to read bot messages aloud
+        const chatBody = document.getElementById('copilot-chat-body');
+        if (chatBody && voiceFeedbackCheck) {
+            const observer = new MutationObserver((mutations) => {
+                if (!voiceFeedbackCheck.checked) return;
+                mutations.forEach(mutation => {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1 && node.classList.contains('msg-bot')) {
+                            // Don't read the typing indicator
+                            if (node.innerText === 'Thinking...' || node.classList.contains('italic')) return;
+                            if ('speechSynthesis' in window) {
+                                window.speechSynthesis.cancel();
+                                const utterance = new SpeechSynthesisUtterance(node.innerText);
+                                window.speechSynthesis.speak(utterance);
+                            }
+                        }
+                    });
+                });
+            });
+            observer.observe(chatBody, { childList: true });
+        }
+      });
+    </script>
+    
+</body>
+</html>

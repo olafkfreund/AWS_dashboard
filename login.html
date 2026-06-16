@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gatekeeper Portal - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        aws: '#FF9900',
+                        border: "hsl(var(--border))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --background: 222.2 84% 4.9%;
+            --foreground: 210 40% 98%;
+            --card: 222.2 84% 6%;
+            --border: 217.2 32.6% 17.5%;
+            --primary: 38 100% 50%; /* AWS Orange */
+            --primary-foreground: 222.2 47.4% 11.2%;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            min-height: 100vh;
+            color: hsl(var(--foreground));
+            font-family: 'Outfit', 'Inter', sans-serif;
+        }
+        
+        .glass-card {
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .neon-glow:hover {
+            box-shadow: 0 0 20px rgba(255, 153, 0, 0.3);
+        }
+    </style>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="flex items-center justify-center p-4">
+
+    <div class="glass-card w-full max-w-md rounded-2xl p-8 transition-all duration-300 transform hover:scale-[1.01]">
+        
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-900/60 border border-slate-700/50 mb-4 text-primary text-3xl shadow-inner">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight text-white">Portal Gatekeeper</h1>
+            <p class="text-slate-400 text-sm mt-1">Please authenticate to access the compliance dashboard</p>
+        </div>
+
+        <div id="error-alert" class="hidden bg-red-900/40 border border-red-500/50 text-red-200 text-sm p-3.5 rounded-lg mb-6 flex items-start gap-3 animate-pulse">
+            <i class="fa-solid fa-circle-exclamation mt-0.5 text-base"></i>
+            <span id="error-message">Authentication failed.</span>
+        </div>
+
+        <div class="space-y-4">
+            
+            <!-- GitHub Auth Method -->
+            <div id="github-container">
+                <button id="github-login-btn" onclick="loginWithGithub()" class="w-full bg-[#24292e] hover:bg-[#2c3137] text-white font-medium py-3 px-4 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-3 border border-slate-700/50">
+                    <i class="fa-brands fa-github text-xl"></i>
+                    <span>Login with GitHub Enterprise</span>
+                </button>
+                <p id="github-info" class="text-[11px] text-slate-500 text-center mt-1.5"></p>
+            </div>
+
+            <!-- Separator -->
+            <div class="flex items-center justify-center gap-3 my-6">
+                <div class="h-[1px] bg-slate-700/50 flex-grow"></div>
+                <span class="text-xs text-slate-500 uppercase tracking-widest font-semibold">Or</span>
+                <div class="h-[1px] bg-slate-700/50 flex-grow"></div>
+            </div>
+
+            <!-- AWS SSO Auth Method -->
+            <div>
+                <button id="aws-login-btn" onclick="loginWithAwsSso()" class="w-full bg-[#1e293b] hover:bg-[#334155] neon-glow text-white font-medium py-3 px-4 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-3 border border-slate-700/50">
+                    <i class="fa-solid fa-key text-primary"></i>
+                    <span>Verify Active AWS SSO Session</span>
+                </button>
+                <p class="text-[11px] text-slate-500 text-center mt-1.5">
+                    Validates your local active <code class="text-primary/90 font-mono">Synechron</code> CLI credentials.
+                </p>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 pt-6 border-t border-slate-800/60">
+            <p class="text-xs text-slate-500 flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-circle-info text-[10px]"></i>
+                Need help? Contact system administrators
+            </p>
+        </div>
+
+    </div>
+
+    <script>
+        let config = { githubEnabled: false, githubHost: 'github.com' };
+
+        // Fetch auth configuration
+        async function fetchConfig() {
+            try {
+                // Show URL error query parameters if present
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlError = urlParams.get('error');
+                if (urlError) {
+                    showError(urlError);
+                }
+
+                const res = await fetch('/api/auth/config');
+                if (res.ok) {
+                    config = await res.json();
+                    const btn = document.getElementById('github-login-btn');
+                    const info = document.getElementById('github-info');
+                    
+                    if (config.githubEnabled) {
+                        info.innerHTML = `Using configured provider: <code class="text-slate-400 font-mono">${config.githubHost}</code>`;
+                    } else {
+                        btn.disabled = true;
+                        btn.classList.add('opacity-40', 'cursor-not-allowed');
+                        info.innerHTML = `<span class="text-amber-500"><i class="fa-solid fa-triangle-exclamation mr-1"></i> GitHub Auth is not configured in .envrc</span>`;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load auth config", e);
+            }
+        }
+
+        function showError(msg) {
+            const alert = document.getElementById('error-alert');
+            const message = document.getElementById('error-message');
+            message.innerHTML = msg;
+            alert.classList.remove('hidden');
+        }
+
+        async function triggerAwsSsoLogin() {
+            const alert = document.getElementById('error-alert');
+            const message = document.getElementById('error-message');
+            message.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary mr-2"></i> Launching AWS SSO browser login...`;
+            
+            try {
+                const response = await fetch('/api/auth/sso', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    message.innerHTML = `<i class="fa-solid fa-circle-check text-green-500 mr-2"></i> AWS SSO login launched! Complete authentication in your browser window, then click <strong>Verify Active AWS SSO Session</strong> above.`;
+                } else {
+                    message.innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-500 mr-2"></i> Failed to launch SSO login: ${data.error || 'Unknown error'}`;
+                }
+            } catch (e) {
+                message.innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-500 mr-2"></i> Failed to connect to proxy server.`;
+            }
+        }
+
+        function loginWithGithub() {
+            if (!config.githubEnabled) return;
+            window.location.href = '/api/auth/github';
+        }
+
+        async function loginWithAwsSso() {
+            const btn = document.getElementById('aws-login-btn');
+            const originalContent = btn.innerHTML;
+            
+            // Set loading state
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary"></i> <span>Verifying credentials...</span>`;
+            
+            try {
+                const response = await fetch('/api/auth/aws-sso-verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    btn.innerHTML = `<i class="fa-solid fa-circle-check text-green-500"></i> <span>Success! Redirecting...</span>`;
+                    btn.classList.remove('bg-[#1e293b]', 'hover:bg-[#334155]');
+                    btn.classList.add('bg-green-950/40', 'border-green-500/50');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 800);
+                } else {
+                    const errorMsg = data.error || "AWS SSO verification failed.";
+                    showError(`${errorMsg} <a href="#" onclick="triggerAwsSsoLogin(); return false;" class="underline font-bold text-primary hover:text-primary/80">Click here to authenticate in browser</a>`);
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                }
+            } catch (error) {
+                showError("A connection error occurred while communicating with the proxy backend.");
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        }
+
+        // Initialize configuration
+        window.addEventListener('DOMContentLoaded', fetchConfig);
+    </script>
+</body>
+</html>
