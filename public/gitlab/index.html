@@ -42,6 +42,9 @@
     <li class="nav-item active" data-view="overview">
       <a href="#overview"><i class="fa-solid fa-chart-simple"></i> Overview</a>
     </li>
+    <li class="nav-item" data-view="followed">
+      <a href="#followed"><i class="fa-solid fa-bell"></i> My Projects</a>
+    </li>
     <li class="nav-item" data-view="pipelines">
       <a href="#pipelines"><i class="fa-solid fa-circle-notch"></i> Pipelines & runs</a>
     </li>
@@ -276,6 +279,30 @@
         </div>
       </div>
 
+      <!-- Repository Overview -->
+      <div class="table-container mb-6">
+        <div style="padding: 20px; border-bottom: 2px solid var(--border-color); font-weight: 700; font-size: 16px;">
+          <i class="fa-solid fa-book-bookmark"></i> Repository Overview
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">Track</th>
+              <th>Repository Name</th>
+              <th>Description</th>
+              <th>Language</th>
+              <th>Stats</th>
+              <th>Last Updated</th>
+            </tr>
+          </thead>
+          <tbody id="overview-repos-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">No projects found. Connect token to load projects.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="table-container">
         <div style="padding: 20px; border-bottom: 2px solid var(--border-color); font-weight: 700; font-size: 16px;">
           <i class="fa-solid fa-clock-rotate-left"></i> Recent Pipeline Activities
@@ -297,6 +324,24 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- View: Followed Projects (My Projects) -->
+    <section id="view-followed" class="view-section">
+      <div class="mb-6">
+        <h3>My Projects & Repositories</h3>
+        <p class="card-desc">Your curated list of tracked repositories. Pipelines and actions are actively monitored for these projects.</p>
+      </div>
+
+      <div id="followed-repos-grid" class="grid-container mb-6" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px;">
+        <!-- Followed project cards rendered dynamically -->
+      </div>
+
+      <div id="followed-empty-state" class="card" style="text-align: center; padding: 40px; color: var(--fg-secondary);">
+        <i class="fa-regular fa-bell" style="font-size: 48px; margin-bottom: 16px; color: var(--border-color);"></i>
+        <h4>No followed projects yet</h4>
+        <p style="margin: 8px 0 16px; max-width: 400px; margin-left: auto; margin-right: auto; font-size: 13px;">Follow projects by clicking the notification bell icon next to any project name in the Overview or Project Stars views.</p>
       </div>
     </section>
 
@@ -420,6 +465,7 @@
         <table>
           <thead>
             <tr>
+              <th style="width: 50px; text-align: center;">Track</th>
               <th>Project Name</th>
               <th>Description</th>
               <th>Path</th>
@@ -430,7 +476,7 @@
           </thead>
           <tbody id="stars-tbody">
             <tr>
-              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">Connect token to view project statistics.</td>
+              <td colspan="7" style="text-align: center; color: var(--fg-secondary);">Connect token to view project statistics.</td>
             </tr>
           </tbody>
         </table>
@@ -874,13 +920,13 @@
       <p>I have live access to your dashboard. Ask me about your projects, open merge requests, issues, or failing pipelines!</p>
     </div>
   </div>
-  <div class="copilot-chat-input-area" style="position: relative;">
-
-      <button id="copilot-mic-btn" style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10;">
+  <div class="copilot-chat-input-area">
+    <div style="position: relative; flex-grow: 1; display: flex;">
+      <input type="text" class="copilot-chat-input" id="copilot-chat-input" style="width: 100%; padding-right: 40px; outline: none;" placeholder="Query Duo for tasks, jobs, status...">
+      <button id="copilot-mic-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10; outline: none;">
           <i class="fa-solid fa-microphone"></i>
       </button>
-    
-    <input type="text" class="copilot-chat-input" id="copilot-chat-input" style="padding-right: 60px;" placeholder="Query Duo for tasks, jobs, status...">
+    </div>
     <button class="copilot-chat-send-btn" id="copilot-send-btn" title="Send message"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
 </div>

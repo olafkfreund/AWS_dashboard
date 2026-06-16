@@ -19,7 +19,7 @@ A modern, clean, and interactive static dashboard for monitoring AWS resources, 
 
 1. Navigate to this directory:
    ```bash
-   cd /home/olafkfreund/Source/Calitii/Synechron-ARC/AWS-dashboard
+   cd /home/olafkfreund/Source/Calitti/AWS_dashboard
    ```
 
 2. Start the backend proxy server:
@@ -29,7 +29,7 @@ A modern, clean, and interactive static dashboard for monitoring AWS resources, 
 
 3. Open your browser and go to:
    ```
-   http://localhost:3000
+   http://localhost:8889
    ```
 
 ## Why this Architecture?

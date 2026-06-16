@@ -57,6 +57,32 @@
     </script>
     <style>
         :root {
+            /* Default Light Mode CSS variables */
+            --background: 210 40% 98%;
+            --foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 222.2 84% 4.9%;
+            --primary: 38 100% 50%; /* AWS Orange */
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --muted: 210 40% 96.1%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --accent: 210 40% 96.1%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --ring: 38 100% 50%;
+            --radius: 0.5rem;
+            --shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+        }
+
+        .dark {
+            /* Dark Mode CSS variables */
             --background: 222.2 84% 4.9%;
             --foreground: 210 40% 98%;
             --card: 222.2 84% 4.9%;
@@ -76,7 +102,7 @@
             --border: 217.2 32.6% 17.5%;
             --input: 217.2 32.6% 17.5%;
             --ring: 38 100% 50%;
-            --radius: 0.5rem;
+            --shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
         }
 
         body {
@@ -84,12 +110,14 @@
             min-height: 100vh;
             color: hsl(var(--foreground));
             font-family: 'Inter', sans-serif;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
         .glass-panel {
             background: hsl(var(--card));
             border: 1px solid hsl(var(--border));
             border-radius: var(--radius);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: var(--shadow);
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         }
         .card-hover {
             transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
@@ -135,20 +163,32 @@
         }
         .copilot-chat-input-area {
             padding: 12px; background: #0f172a; border-top: 1px solid rgba(255,255,255,0.05);
-            display: flex; gap: 8px;
+            display: flex; gap: 8px; align-items: center;
         }
         .copilot-chat-input {
             flex-grow: 1; background: #1e293b; border: 1px solid rgba(255,255,255,0.1);
             color: white; border-radius: 6px; padding: 8px 12px; outline: none;
         }
         .copilot-chat-send {
-            background: #FF9900; color: black; border: none; border-radius: 6px; padding: 0 16px; cursor: pointer; font-weight: bold;
+            background: #FF9900; color: black; border: none; border-radius: 6px; height: 38px; width: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; transition: background-color 0.2s; outline: none;
+        }
+        .copilot-chat-send:hover {
+            background: #e68a00;
         }
         .msg-bot { background: #334155; padding: 10px 14px; border-radius: 8px 8px 8px 0; max-width: 85%; align-self: flex-start; color: #e2e8f0; font-size: 14px; }
         .msg-user { background: #FF9900; color: black; padding: 10px 14px; border-radius: 8px 8px 0 8px; max-width: 85%; align-self: flex-end; font-size: 14px; font-weight: 500; }
     </style>
     <!-- FontAwesome for Assistant Icon -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        // Apply theme immediately to prevent flash of wrong theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.documentElement.classList.remove('dark');
+        } else {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
 </head>
 <body class="p-8">
     <div class="max-w-6xl mx-auto">
@@ -175,13 +215,16 @@
                     <p class="text-muted-foreground mt-2">Synechron Profile • <span id="last-updated">Updating...</span></p>
                 </div>
                 <div class="flex items-center space-x-4">
+                    <button id="theme-toggle-btn" onclick="toggleTheme()" class="bg-secondary hover:bg-secondary/80 text-secondary-foreground p-2 rounded-md shadow-sm border border-border transition-colors flex items-center justify-center w-10 h-10" title="Toggle theme">
+                        <i class="fa-solid fa-moon text-lg" id="theme-toggle-icon"></i>
+                    </button>
                     <button id="sso-login-btn" onclick="triggerSSOLogin()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-sm py-2 px-4 rounded-md shadow-sm transition-colors flex items-center">
                         <i class="fa-solid fa-key mr-2"></i> AWS SSO Login
                     </button>
                 </div>
             </header>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 <!-- EC2 Resources Panel -->
                 <div class="glass-panel p-6 card-hover">
                     <div class="flex justify-between items-center mb-6">
@@ -191,7 +234,7 @@
                         <span id="resource-count" class="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-bold">0</span>
                     </div>
                     <div id="resources-loader" class="text-center py-8"><div class="loader"></div></div>
-                    <div id="resources-list" class="space-y-4 hidden max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                    <div id="resources-list" class="space-y-4 hidden">
                         <!-- Instances will be populated here -->
                     </div>
                 </div>
@@ -205,7 +248,7 @@
                         <span id="login-count" class="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-bold">0</span>
                     </div>
                     <div id="logins-loader" class="text-center py-8"><div class="loader"></div></div>
-                    <div id="logins-list" class="space-y-4 hidden max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                    <div id="logins-list" class="space-y-4 hidden">
                         <!-- Logins will be populated here -->
                     </div>
                 </div>
@@ -220,7 +263,7 @@
             
             <div class="glass-panel p-8 max-w-2xl mx-auto">
                 <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
-                    <i class="fa-solid fa-key mr-3 text-primary"></i> Environment Tokens
+                    <i class="fa-solid fa-key mr-3 text-primary"></i> Environment Tokens (PATs)
                 </h2>
                 
                 <div class="space-y-6">
@@ -232,10 +275,54 @@
                         <label class="block text-sm font-medium text-muted-foreground mb-2">GitLab Personal Access Token (PAT)</label>
                         <input type="password" id="settings-gitlab-pat" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="glpat-...">
                     </div>
-                    <button onclick="saveSettings()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-md shadow-sm transition-colors mt-4">
-                        Save to .envrc
-                    </button>
-                    <p id="settings-msg" class="text-sm mt-2 text-green-500 hidden"></p>
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">GitLab Instance URL</label>
+                        <input type="url" id="settings-gitlab-url" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="https://gitlab.com">
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
+                <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
+                    <i class="fa-solid fa-shield-halved mr-3 text-primary"></i> Browser SSO / OAuth Applications (Optional)
+                </h2>
+                <p class="text-xs text-muted-foreground mb-6">Configure OAuth App credentials to enable browser-based SSO login for GitHub and GitLab.</p>
+                
+                <div class="space-y-6">
+                    <div class="border-b border-border pb-6">
+                        <h3 class="text-sm font-medium text-foreground mb-4">GitHub OAuth App Settings</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[11px] font-medium text-muted-foreground mb-2">Client ID</label>
+                                <input type="text" id="settings-github-client-id" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary text-xs" placeholder="From GitHub Developer Settings">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-muted-foreground mb-2">Client Secret</label>
+                                <input type="password" id="settings-github-client-secret" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary text-xs" placeholder="Client Secret">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-sm font-medium text-foreground mb-4">GitLab OAuth App Settings</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[11px] font-medium text-muted-foreground mb-2">Client ID</label>
+                                <input type="text" id="settings-gitlab-client-id" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary text-xs" placeholder="From GitLab Applications Settings">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-muted-foreground mb-2">Client Secret</label>
+                                <input type="password" id="settings-gitlab-client-secret" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary text-xs" placeholder="Client Secret">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="pt-4 flex items-center gap-4">
+                        <button onclick="saveSettings()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-md shadow-sm transition-colors">
+                            Save all to .envrc
+                        </button>
+                        <p id="settings-msg" class="text-sm text-green-500 hidden"></p>
+                    </div>
                 </div>
             </div>
 
@@ -319,11 +406,13 @@
                 Hello! I am your Multi-Environment Assistant. I can help you with AWS, GitHub, and GitLab. How can I assist you today?
             </div>
         </div>
-        <div class="copilot-chat-input-area" style="position: relative;">
-            <input type="text" class="copilot-chat-input" id="copilot-chat-input" placeholder="Ask about instances, PRs, pipelines..." style="padding-right: 60px;">
-            <button id="copilot-mic-btn" style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px;">
-                <i class="fa-solid fa-microphone"></i>
-            </button>
+        <div class="copilot-chat-input-area">
+            <div style="position: relative; flex-grow: 1; display: flex;">
+                <input type="text" class="copilot-chat-input" id="copilot-chat-input" placeholder="Ask about instances, PRs, pipelines..." style="width: 100%; padding-right: 40px; outline: none;">
+                <button id="copilot-mic-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; outline: none; z-index: 10;">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+            </div>
             <button class="copilot-chat-send" id="copilot-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
     </div>
@@ -403,6 +492,40 @@
             logins: []
         };
 
+        function applyTheme(theme) {
+            const htmlEl = document.documentElement;
+            if (theme === 'light') {
+                htmlEl.classList.remove('dark');
+            } else {
+                htmlEl.classList.add('dark');
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+            updateThemeIcon(newTheme);
+            
+            // Sync settings dropdown if present
+            const selectEl = document.getElementById('settings-theme');
+            if (selectEl) {
+                selectEl.value = newTheme;
+            }
+        }
+
+        function updateThemeIcon(theme) {
+            const iconEl = document.getElementById('theme-toggle-icon');
+            if (iconEl) {
+                if (theme === 'light') {
+                    iconEl.className = 'fa-solid fa-sun text-lg text-amber-500';
+                } else {
+                    iconEl.className = 'fa-solid fa-moon text-lg text-primary';
+                }
+            }
+        }
+
         // Navigation UI logic
         function showView(viewId) {
             document.getElementById('view-aws').style.display = viewId === 'aws' ? 'block' : 'none';
@@ -424,10 +547,15 @@
             try {
                 const res = await fetch('/api/config/tokens');
                 const data = await res.json();
-                if (data.github) document.getElementById('settings-github-pat').value = data.github;
-                if (data.gitlab) document.getElementById('settings-gitlab-pat').value = data.gitlab;
+                document.getElementById('settings-github-pat').value = data.github || '';
+                document.getElementById('settings-gitlab-pat').value = data.gitlab || '';
+                document.getElementById('settings-gitlab-url').value = data.instance_url || 'https://gitlab.com';
+                document.getElementById('settings-github-client-id').value = data.github_client_id || '';
+                document.getElementById('settings-github-client-secret').value = data.github_client_secret || '';
+                document.getElementById('settings-gitlab-client-id').value = data.gitlab_client_id || '';
+                document.getElementById('settings-gitlab-client-secret').value = data.gitlab_client_secret || '';
             } catch (e) {
-                console.error("Failed to load settings");
+                console.error("Failed to load settings", e);
             }
             // Load Interface Options from localStorage
             const theme = localStorage.getItem('theme') || 'dark';
@@ -441,6 +569,11 @@
         async function saveSettings() {
             const github = document.getElementById('settings-github-pat').value;
             const gitlab = document.getElementById('settings-gitlab-pat').value;
+            const instance_url = document.getElementById('settings-gitlab-url').value;
+            const github_client_id = document.getElementById('settings-github-client-id').value;
+            const github_client_secret = document.getElementById('settings-github-client-secret').value;
+            const gitlab_client_id = document.getElementById('settings-gitlab-client-id').value;
+            const gitlab_client_secret = document.getElementById('settings-gitlab-client-secret').value;
             const msg = document.getElementById('settings-msg');
             
             // Save Interface Options to localStorage
@@ -450,12 +583,21 @@
             localStorage.setItem('theme', theme);
             localStorage.setItem('refresh_interval', refresh);
             localStorage.setItem('copilot_ollama_url', ollamaUrl);
+            applyTheme(theme);
             
             try {
                 const res = await fetch('/api/config/tokens', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ github, gitlab })
+                    body: JSON.stringify({ 
+                        github, 
+                        gitlab, 
+                        instance_url, 
+                        github_client_id, 
+                        github_client_secret, 
+                        gitlab_client_id, 
+                        gitlab_client_secret 
+                    })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -559,7 +701,10 @@
         }
 
         // Trigger Local AWS SSO Login
+        let headerSSOPollTimeout = null;
         async function triggerSSOLogin() {
+            if (headerSSOPollTimeout) clearTimeout(headerSSOPollTimeout);
+            
             const btn = document.getElementById('sso-login-btn');
             const originalText = btn.innerHTML;
             btn.innerHTML = `<div class="loader mr-2" style="width: 16px; height: 16px; border-top-color: black;"></div> Opening Browser...`;
@@ -570,18 +715,54 @@
                 const data = await res.json();
                 
                 if (data.success) {
-                    btn.innerHTML = `<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Login Triggered!`;
-                    // Wait a bit for the user to complete the browser flow, then refresh data
-                    setTimeout(() => {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                        document.getElementById('resources-list').classList.add('hidden');
-                        document.getElementById('resources-loader').classList.remove('hidden');
-                        document.getElementById('logins-list').classList.add('hidden');
-                        document.getElementById('logins-loader').classList.remove('hidden');
-                        fetchResources();
-                        fetchLogins();
-                    }, 8000); // Wait 8 seconds before auto-refresh
+                    btn.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Confirm Browser...`;
+                    
+                    // Open AWS SSO verification URL in browser
+                    window.open(data.verificationUriComplete, '_blank');
+                    
+                    // Show a message/instruction overlay or alert briefly
+                    alert(`AWS SSO Login Initialized!\n\nPlease complete authentication in your AWS SSO browser tab.\n\nYour user verification code is: ${data.userCode}`);
+                    
+                    // Start recursive polling
+                    async function poll() {
+                        try {
+                            const pollRes = await fetch('/api/auth/sso/poll', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ deviceCode: data.deviceCode })
+                            });
+                            const pollData = await pollRes.json();
+                            
+                            if (pollRes.ok && pollData.success) {
+                                if (pollData.status === 'approved') {
+                                    btn.innerHTML = `<i class="fa-solid fa-circle-check mr-2 text-green-500"></i> Success!`;
+                                    
+                                    setTimeout(() => {
+                                        btn.innerHTML = originalText;
+                                        btn.disabled = false;
+                                        document.getElementById('resources-list').classList.add('hidden');
+                                        document.getElementById('resources-loader').classList.remove('hidden');
+                                        document.getElementById('logins-list').classList.add('hidden');
+                                        document.getElementById('logins-loader').classList.remove('hidden');
+                                        fetchResources();
+                                        fetchLogins();
+                                    }, 800);
+                                    return; // Stop polling
+                                } else if (pollData.status === 'error') {
+                                    alert("AWS SSO authentication error: " + pollData.error);
+                                    btn.innerHTML = originalText;
+                                    btn.disabled = false;
+                                    return; // Stop polling
+                                }
+                            }
+                        } catch (pollErr) {
+                            console.error("SSO poll error:", pollErr);
+                        }
+                        
+                        headerSSOPollTimeout = setTimeout(poll, 5000);
+                    }
+                    
+                    headerSSOPollTimeout = setTimeout(poll, 5000);
                 } else {
                     alert('Error: ' + data.error);
                     btn.innerHTML = originalText;
@@ -850,12 +1031,43 @@ Please answer Olaf's questions about these resources and login events, or genera
         });
 
         // Initialization
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            const theme = localStorage.getItem('theme') || 'dark';
+            applyTheme(theme);
+            updateThemeIcon(theme);
+            
             document.getElementById('last-updated').innerText = new Date().toLocaleTimeString();
             fetchResources();
             fetchLogins();
             initializeWebMCP();
+            
+            // Check if AWS profile supports SSO, otherwise hide the login button
+            try {
+                const res = await fetch('/api/auth/config');
+                const data = await res.json();
+                if (data.awsProfile) {
+                    const headerText = document.querySelector('header p.text-muted-foreground');
+                    if (headerText) {
+                        headerText.innerHTML = `${data.awsProfile} Profile • <span id="last-updated-profile">Updating...</span>`;
+                    }
+                }
+                if (data.awsIsSSO === false) {
+                    const ssoBtn = document.getElementById('sso-login-btn');
+                    if (ssoBtn) ssoBtn.style.display = 'none';
+                }
+            } catch (e) {
+                console.error("Failed to load auth config", e);
+            }
         });
+        
+        // Update the timestamp loop to support dynamic profile span
+        setInterval(() => {
+            const timeStr = new Date().toLocaleTimeString();
+            const lastUpdated = document.getElementById('last-updated');
+            if (lastUpdated) lastUpdated.innerText = timeStr;
+            const lastUpdatedProfile = document.getElementById('last-updated-profile');
+            if (lastUpdatedProfile) lastUpdatedProfile.innerText = timeStr;
+        }, 1000);
     </script>
 </body>
 </html>

@@ -275,6 +275,30 @@
         </div>
       </div>
 
+      <!-- Repository Overview -->
+      <div class="table-container mb-6">
+        <div style="padding: 20px; border-bottom: 2px solid var(--border-color); font-weight: 700; font-size: 16px;">
+          <i class="fa-solid fa-book-bookmark"></i> Repository Overview
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">Track</th>
+              <th>Repository Name</th>
+              <th>Description</th>
+              <th>Language</th>
+              <th>Stats</th>
+              <th>Last Updated</th>
+            </tr>
+          </thead>
+          <tbody id="overview-repos-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--fg-secondary);">No repositories found. Connect token to load repositories.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="table-container">
         <div style="padding: 20px; border-bottom: 2px solid var(--border-color); font-weight: 700; font-size: 16px;">
           <i class="fa-solid fa-clock-rotate-left"></i> Recent Workflow Activities
@@ -891,13 +915,13 @@
       <p>I have live access to your dashboard. Ask me about your repositories, open pull requests, issues, or failing workflows!</p>
     </div>
   </div>
-  <div class="copilot-chat-input-area" style="position: relative;">
-
-      <button id="copilot-mic-btn" style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10;">
+  <div class="copilot-chat-input-area">
+    <div style="position: relative; flex-grow: 1; display: flex;">
+      <input type="text" class="copilot-chat-input" id="copilot-chat-input" style="width: 100%; padding-right: 40px; outline: none;" placeholder="Query Copilot for tasks, jobs, status...">
+      <button id="copilot-mic-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10; outline: none;">
           <i class="fa-solid fa-microphone"></i>
       </button>
-    
-    <input type="text" class="copilot-chat-input" id="copilot-chat-input" style="padding-right: 60px;" placeholder="Query Copilot for tasks, jobs, status...">
+    </div>
     <button class="copilot-chat-send-btn" id="copilot-send-btn" title="Send message"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
 </div>

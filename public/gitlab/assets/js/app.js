@@ -10,6 +10,7 @@
     instanceUrl: localStorage.getItem('gl_instance_url') || 'https://gitlab.com',
     user: null,
     repos: [], // maps to GitLab Projects
+    followedRepos: [],
     prs: [],   // maps to GitLab Merge Requests
     issues: [],
     workflowRuns: {}, // maps to GitLab Pipelines
@@ -93,6 +94,8 @@
     
     // Stars View
     el.starsTbody = document.getElementById('stars-tbody');
+    el.followedReposGrid = document.getElementById('followed-repos-grid');
+    el.overviewReposTbody = document.getElementById('overview-repos-tbody');
 
     // Boards View
     el.projectSelect = document.getElementById('project-select');
@@ -204,48 +207,24 @@
     if (state.token) {
         state.token = state.token.replace(/[\r\n]/g, '').trim();
     }
-
+    
+    // Load followed repos
+    const stored = localStorage.getItem('gl_followed_repos');
+    state.followedRepos = stored ? JSON.parse(stored) : [];
+    
     initializeDOMElements();
     setupTheme();
     setupNavigation();
     setupEventListeners();
     setupAutoRefresh();
 
-    // Check if redirect contains OAuth code
+    // Check if redirect contains OAuth token
     const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
+    const tokenParam = urlParams.get('token');
     
-    if (code) {
+    if (tokenParam) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      showView('setup');
-      if (el.authErrorMsg) {
-        el.authErrorMsg.textContent = 'Exchanging authorization code...';
-        el.authErrorMsg.className = 'badge badge-info';
-        el.authErrorMsg.style.display = 'block';
-      }
-      
-      try {
-        const redirectUri = window.location.origin + window.location.pathname;
-        const res = await fetch('http://localhost:8765/oauth/exchange', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: code, redirect_uri: redirectUri })
-        });
-        
-        const data = await res.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        
-        if (data.access_token) {
-          validateAndConnect(state.instanceUrl, data.access_token, true);
-        }
-      } catch (err) {
-        if (el.authErrorMsg) {
-          el.authErrorMsg.textContent = `OAuth connection failed: ${err.message}. Make sure node mcp-bridge.js is running.`;
-          el.authErrorMsg.className = 'badge badge-danger';
-        }
-      }
+      validateAndConnect(state.instanceUrl, tokenParam, true);
     } else if (state.token) {
       validateAndConnect(state.instanceUrl, state.token, false);
     } else {
@@ -258,14 +237,15 @@
 
   async function checkOauthBridgeAvailability() {
     try {
-      const res = await fetch('http://localhost:8765/config');
+      const res = await fetch('/api/auth/config');
       const data = await res.json();
-      if (data.client_id) {
-        state.oauthClientId = data.client_id;
-        if (data.gitlab_url) {
-          state.instanceUrl = data.gitlab_url;
+      if (data.gitlabEnabled) {
+        state.oauthClientId = 'enabled';
+        if (data.gitlabHost) {
+          const url = `https://${data.gitlabHost}`;
+          state.instanceUrl = url;
           if (el.instanceUrlInput) {
-            el.instanceUrlInput.value = data.gitlab_url;
+            el.instanceUrlInput.value = url;
           }
         }
         if (el.oauthLoginContainer) {
@@ -329,6 +309,7 @@
       const titleMap = {
         'setup': 'Connect to GitLab',
         'overview': 'Overview',
+        'followed': 'My Projects',
         'pipelines': 'Pipelines & Runs',
         'mrs': 'Merge Requests',
         'issues': 'Issues Management',
@@ -355,6 +336,8 @@
         calculateMetrics();
       } else if (viewId === 'settings') {
         loadAssistantSettings();
+      } else if (viewId === 'followed') {
+        renderFollowedRepos();
       }
     }
   }
@@ -377,9 +360,8 @@
     }
     if (el.btnOauthLogin) {
       el.btnOauthLogin.addEventListener('click', function () {
-        if (!state.oauthClientId) return;
-        const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
-        window.location.href = `${state.instanceUrl}/oauth/authorize?client_id=${state.oauthClientId}&response_type=code&scope=api+read_user+read_api&redirect_uri=${redirectUri}`;
+        const redirectPath = window.location.pathname;
+        window.location.href = `/api/auth/gitlab?redirect=${encodeURIComponent(redirectPath)}`;
       });
     }
 
@@ -730,7 +712,7 @@
   async function glFetch(path, options = {}) {
     const baseUrl = state.instanceUrl.replace(/\/$/, '');
     const headers = {
-      'PRIVATE-TOKEN': state.token,
+      'Authorization': `Bearer ${state.token}`,
       'Accept': 'application/json',
       ...options.headers
     };
@@ -827,6 +809,8 @@
     state.mergedPrs = [];
     
     localStorage.removeItem('gl_pat');
+    state.followedRepos = [];
+    localStorage.removeItem('gl_followed_repos');
     
     if (el.userProfileHeader) {
       el.userProfileHeader.style.display = 'none';
@@ -895,11 +879,18 @@
       state.issues = issues;
       el.statOpenIssues.textContent = issues.length;
 
+      // Prioritize followed projects, falling back to top recently updated ones if followed list is small
+      let monitoredProjects = projects.filter(p => state.followedRepos.includes(p.path_with_namespace));
+      if (monitoredProjects.length < 5) {
+        const remaining = projects.filter(p => !state.followedRepos.includes(p.path_with_namespace));
+        monitoredProjects = monitoredProjects.concat(remaining.slice(0, 5 - monitoredProjects.length));
+      }
+
       // 4. Load Recent Pipelines for overview
-      await loadRecentOverviewPipelines(projects.slice(0, 5));
+      await loadRecentOverviewPipelines(monitoredProjects.slice(0, 5));
 
       // 5. Load Security Scans (Vulnerabilities)
-      await loadSecurityScans(projects.slice(0, 5));
+      await loadSecurityScans(monitoredProjects.slice(0, 5));
 
       // Check and notify changes
       await checkAndNotifyChanges();
@@ -910,6 +901,7 @@
       renderIssues();
       renderSecurityAlerts();
       renderStars();
+      renderFollowedRepos();
 
       const activeHash = window.location.hash.replace('#', '') || 'overview';
       if (activeHash === 'pipelines') {
@@ -945,6 +937,7 @@
 
   // Overview
   function renderOverview() {
+    renderRepositoryOverview();
     let runningCount = 0;
     const allRecentRuns = [];
 
@@ -1137,15 +1130,25 @@
   // Stars View
   function renderStars() {
     if (state.repos.length === 0) {
-      el.starsTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--fg-secondary);">Connect account to load stars analytics.</td></tr>`;
+      el.starsTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--fg-secondary);">Connect account to load stars analytics.</td></tr>`;
       return;
     }
 
     const sortedRepos = [...state.repos].sort((a, b) => (b.star_count || 0) - (a.star_count || 0));
 
     el.starsTbody.innerHTML = sortedRepos.map(proj => {
+      const isFollowed = state.followedRepos.includes(proj.path_with_namespace);
+      const followIcon = isFollowed ? 'fa-solid fa-bell' : 'fa-regular fa-bell';
+      const followColor = isFollowed ? 'color: var(--yellow);' : 'color: var(--fg-secondary);';
+      const followTitle = isFollowed ? 'Stop tracking this project' : 'Track and get notifications for this project';
+
       return `
         <tr>
+          <td style="text-align: center; vertical-align: middle;">
+            <button class="btn btn-sm btn-icon" onclick="toggleFollowRepo('${proj.path_with_namespace}')" style="margin: 0; padding: 4px 8px; ${followColor}" title="${followTitle}">
+              <i class="${followIcon}"></i>
+            </button>
+          </td>
           <td><strong><a href="${proj.web_url}" target="_blank">${proj.name}</a></strong></td>
           <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${proj.description || 'No description'}">
             <span class="card-desc">${proj.description || 'No description provided.'}</span>
@@ -2989,6 +2992,115 @@ Use this information to answer user questions about tasks, merge requests, issue
         }
       }
     }
+  }
+
+  // Toggle follow status for GitLab project
+  window.toggleFollowRepo = function(projectPath) {
+    const idx = state.followedRepos.indexOf(projectPath);
+    if (idx > -1) {
+      state.followedRepos.splice(idx, 1);
+      showNotification('Project Unfollowed', `Stopped tracking ${projectPath}`, 'info');
+    } else {
+      state.followedRepos.push(projectPath);
+      showNotification('Project Tracked', `Now tracking ${projectPath} for changes!`, 'success');
+    }
+    localStorage.setItem('gl_followed_repos', JSON.stringify(state.followedRepos));
+    
+    // Rerender
+    renderStars();
+    renderFollowedRepos();
+    renderRepositoryOverview();
+    
+    // Refresh to update monitored projects in background
+    refreshDashboard();
+  };
+
+  // Render Project Overview Table on GitLab Overview Tab
+  function renderRepositoryOverview() {
+    if (!el.overviewReposTbody) return;
+    if (state.repos.length === 0) {
+      el.overviewReposTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--fg-secondary);">No projects found. Connect token to load projects.</td></tr>`;
+      return;
+    }
+
+    el.overviewReposTbody.innerHTML = state.repos.map(proj => {
+      const isFollowed = state.followedRepos.includes(proj.path_with_namespace);
+      const followIcon = isFollowed ? 'fa-solid fa-bell' : 'fa-regular fa-bell';
+      const followColor = isFollowed ? 'color: var(--yellow);' : 'color: var(--fg-secondary);';
+      const followTitle = isFollowed ? 'Stop tracking this project' : 'Track and get notifications for this project';
+
+      return `
+        <tr>
+          <td style="text-align: center; vertical-align: middle;">
+            <button class="btn btn-sm btn-icon" onclick="toggleFollowRepo('${proj.path_with_namespace}')" style="margin: 0; padding: 4px 8px; ${followColor}" title="${followTitle}">
+              <i class="${followIcon}"></i>
+            </button>
+          </td>
+          <td>
+            <strong><a href="${proj.web_url}" target="_blank">${proj.name}</a></strong>
+            <span class="badge ${proj.visibility === 'public' ? 'badge-info' : 'badge-neutral'}" style="margin-left: 8px; font-size: 10px; padding: 2px 4px;">
+              ${proj.visibility ? proj.visibility.charAt(0).toUpperCase() + proj.visibility.slice(1) : 'Private'}
+            </span>
+          </td>
+          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${proj.description || 'No description'}">
+            <span class="card-desc">${proj.description || 'No description provided.'}</span>
+          </td>
+          <td><span class="badge badge-neutral">${proj.namespace ? proj.namespace.name : 'N/A'}</span></td>
+          <td>
+            <div style="display: flex; gap: 12px; font-size: 12px; color: var(--fg-secondary); align-items: center;">
+              <span><i class="fa-solid fa-star" style="color: var(--yellow);"></i> ${proj.star_count || 0}</span>
+              <span><i class="fa-solid fa-code-fork"></i> ${proj.forks_count || 0}</span>
+            </div>
+          </td>
+          <td>${formatRelativeTime(proj.last_activity_at || proj.updated_at)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Render followed GitLab projects (My Projects view)
+  function renderFollowedRepos() {
+    if (!el.followedReposGrid) return;
+    
+    const followedList = state.repos.filter(r => state.followedRepos.includes(r.path_with_namespace));
+    
+    if (followedList.length === 0) {
+      el.followedReposGrid.style.display = 'none';
+      const emptyState = document.getElementById('followed-empty-state');
+      if (emptyState) emptyState.style.display = 'block';
+      return;
+    }
+    
+    const emptyState = document.getElementById('followed-empty-state');
+    if (emptyState) emptyState.style.display = 'none';
+    el.followedReposGrid.style.display = 'grid';
+    
+    el.followedReposGrid.innerHTML = followedList.map(proj => {
+      return `
+        <div class="card card-accent-blue" style="display: flex; flex-direction: column; justify-content: space-between; height: 100%;">
+          <div>
+            <div class="flex-between" style="align-items: flex-start; margin-bottom: 8px;">
+              <h4 style="margin: 0; word-break: break-all;">
+                <a href="${proj.web_url}" target="_blank">${proj.name}</a>
+              </h4>
+              <button class="btn btn-sm btn-icon" onclick="toggleFollowRepo('${proj.path_with_namespace}')" style="color: var(--yellow); padding: 4px;" title="Unfollow Project">
+                <i class="fa-solid fa-bell"></i>
+              </button>
+            </div>
+            <p class="card-desc" style="margin-bottom: 16px; min-height: 40px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+              ${proj.description || 'No description provided.'}
+            </p>
+          </div>
+          <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--fg-secondary);">
+            <span>Namespace: <strong>${proj.namespace ? proj.namespace.name : 'N/A'}</strong></span>
+            <div style="display: flex; gap: 8px;">
+              <span><i class="fa-solid fa-star"></i> ${proj.star_count || 0}</span>
+              <span><i class="fa-solid fa-code-fork"></i> ${proj.forks_count || 0}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   // Kickstart App

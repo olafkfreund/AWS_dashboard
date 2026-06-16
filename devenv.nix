@@ -10,14 +10,14 @@
   # Language configuration for Node.js
   languages.javascript = {
     enable = true;
-    package = pkgs.nodejs_20;
+    package = pkgs.nodejs_22;
     npm.enable = true;
   };
 
   # Environment variables for the dev shell
   env = {
     AWS_PROFILE = "Synechron";
-    PORT = "3000";
+    PORT = "8889";
   };
 
   # Custom scripts helper commands

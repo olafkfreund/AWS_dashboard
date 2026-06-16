@@ -75,7 +75,7 @@ To configure the server in Claude Desktop, add the following to `~/.config/Claud
   "mcpServers": {
     "aws-dashboard": {
       "command": "node",
-      "args": ["/home/olafkfreund/Source/Calitii/Synechron-ARC/AWS-dashboard/mcp_server.js"],
+      "args": ["/home/olafkfreund/Source/Calitti/AWS_dashboard/mcp_server.js"],
       "env": {
         "AWS_PROFILE": "Synechron",
         "AWS_REGION": "us-east-1"

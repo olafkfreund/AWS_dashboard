@@ -948,24 +948,23 @@ tr:hover td {
 }
 
 .copilot-chat-input-area {
-  padding: 12px;
-  background-color: var(--bg-soft);
-  border-top: 2px solid var(--border-color);
   display: flex;
   gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-medium);
+  align-items: center;
 }
 
 .copilot-chat-input {
   flex-grow: 1;
   background-color: var(--bg-hard);
-  border: 2px solid var(--border-color);
-  color: var(--fg-primary);
-  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  color: var(--text-normal);
   border-radius: 6px;
-  font-size: 13px;
+  padding: 8px 12px;
   outline: none;
-  font-family: var(--font-sans);
-  transition: border-color 0.15s ease;
+  font-size: 14px;
 }
 
 .copilot-chat-input:focus {
@@ -975,14 +974,16 @@ tr:hover td {
 .copilot-chat-send-btn {
   background-color: var(--blue);
   color: var(--bg-medium);
-  border: 2px solid var(--border-color);
-  padding: 8px 12px;
+  border: none;
+  height: 38px;
+  width: 38px;
   border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background-color 0.15s ease, color 0.15s ease;
+  outline: none;
 }
 
 .copilot-chat-send-btn:hover {

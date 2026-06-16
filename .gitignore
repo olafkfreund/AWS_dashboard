@@ -2,3 +2,4 @@ node_modules/
 .envrc
 .DS_Store
 *.log
+.server.pid

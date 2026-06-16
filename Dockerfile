@@ -23,11 +23,11 @@ WORKDIR /app
 COPY --from=builder /app /app
 
 # Expose port
-EXPOSE 3000
+EXPOSE 8889
 
 # Set production environment variables
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8889
 
 # Run the backend proxy server
 CMD ["node", "server.js"]
