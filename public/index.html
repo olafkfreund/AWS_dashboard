@@ -1426,7 +1426,19 @@
             
             try {
                 const res = await fetch('/api/k8s/status');
+                
+                const contentType = res.headers.get('content-type') || '';
+                if (res.redirected || !contentType.includes('application/json') || res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
                 const data = await res.json();
+                
+                if (data && data.success === false && (data.error || '').includes('Unauthorized')) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 
                 if (refreshIcon) refreshIcon.classList.remove('animate-spin');
                 loader.classList.add('hidden');

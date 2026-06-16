@@ -102,6 +102,10 @@ app.use((req, res, next) => {
         return next();
     }
 
+    if (req.path.startsWith('/api/')) {
+        return res.status(401).json({ success: false, error: 'Unauthorized. Please login.' });
+    }
+
     res.redirect('/login.html');
 });
 
