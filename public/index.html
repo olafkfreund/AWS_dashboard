@@ -138,6 +138,48 @@
             white-space: nowrap;
             min-width: 0;
         }
+        /* Resource detail slide-over */
+        #resource-detail-panel {
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #resource-detail-panel.open {
+            transform: translateX(0);
+        }
+        #resource-detail-backdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #resource-detail-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+        }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+            white-space: nowrap;
+            flex-shrink: 0;
+            padding-top: 1px;
+        }
+        .detail-value {
+            font-size: 12px;
+            color: #e2e8f0;
+            font-family: ui-monospace, monospace;
+            word-break: break-all;
+            text-align: right;
+        }
         .loader {
             border: 3px solid rgba(255, 255, 255, 0.1);
             border-top: 3px solid #FF9900;
@@ -163,6 +205,57 @@
     </script>
 </head>
 <body class="p-8">
+
+    <!-- Resource Detail Slide-over Panel -->
+    <div id="resource-detail-backdrop"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+         onclick="closeResourceDetail()"></div>
+
+    <div id="resource-detail-panel"
+         class="fixed top-0 right-0 h-full w-[480px] max-w-[95vw] bg-slate-900 border-l border-slate-700/60 shadow-2xl z-50 flex flex-col">
+
+        <!-- Panel header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 shrink-0">
+            <div class="flex items-center gap-3 min-w-0">
+                <div id="rdp-status-dot" class="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0"></div>
+                <div class="min-w-0">
+                    <p id="rdp-service" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"></p>
+                    <h3 id="rdp-name" class="font-bold text-white text-base leading-tight truncate"></h3>
+                </div>
+            </div>
+            <button onclick="closeResourceDetail()"
+                    class="shrink-0 ml-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+
+        <!-- Cost banner -->
+        <div id="rdp-cost-banner" class="px-5 py-3 border-b border-slate-700/40 bg-slate-800/40 shrink-0 flex items-center justify-between gap-4">
+            <div>
+                <p class="text-[9px] uppercase tracking-wider text-slate-500">Est. Monthly Cost</p>
+                <p id="rdp-cost" class="text-xl font-bold text-emerald-400">$0.00</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[9px] uppercase tracking-wider text-slate-500">Last Month</p>
+                <p id="rdp-last-cost" class="text-base font-semibold text-slate-300">$0.00</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[9px] uppercase tracking-wider text-slate-500">Usage</p>
+                <p id="rdp-usage" class="text-xs text-slate-400 font-mono">N/A</p>
+            </div>
+        </div>
+
+        <!-- Scrollable detail body -->
+        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5" id="rdp-body">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Footer action bar -->
+        <div id="rdp-footer" class="px-5 py-3 border-t border-slate-700/60 shrink-0 flex gap-2 flex-wrap">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
     <div class="max-w-6xl mx-auto">
         <!-- Central Navigation Tabs -->
         <div class="flex justify-center mb-8">
@@ -789,6 +882,186 @@
         };
 
         // Fetch Resources
+        // ── Resource Detail Slide-over ─────────────────────────────────────
+        window._resourceMap = {};
+
+        function closeResourceDetail() {
+            document.getElementById('resource-detail-panel').classList.remove('open');
+            document.getElementById('resource-detail-backdrop').classList.remove('open');
+        }
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeResourceDetail(); });
+
+        function showResourceDetail(id) {
+            const r = window._resourceMap[id];
+            if (!r) return;
+
+            // ── Header ──────────────────────────────────────────────────────
+            document.getElementById('rdp-service').textContent = r.service || '—';
+            document.getElementById('rdp-name').textContent = r.name || r.id;
+
+            const dot = document.getElementById('rdp-status-dot');
+            const state = (r.state || 'running').toLowerCase();
+            dot.className = 'w-2.5 h-2.5 rounded-full shrink-0 ' + (
+                ['stopped','failed','deleting','delete_failed'].includes(state) ? 'bg-red-500' :
+                ['creating','pending','updating','create_in_progress','update_in_progress'].includes(state) ? 'bg-amber-500 animate-pulse' :
+                'bg-green-500 animate-pulse'
+            );
+
+            // ── Cost Banner ─────────────────────────────────────────────────
+            const cost = parseFloat(r.costEstimate || 0);
+            const costEl = document.getElementById('rdp-cost');
+            costEl.textContent = '$' + (r.costEstimate || '0.00');
+            costEl.className = 'text-xl font-bold ' + (cost > 0 ? 'text-emerald-400' : 'text-slate-500');
+            document.getElementById('rdp-last-cost').textContent = '$' + (r.lastMonthCost || '0.00');
+            document.getElementById('rdp-usage').textContent = r.lastMonthUsage || 'N/A';
+
+            // ── Helper to render a section ───────────────────────────────────
+            const row = (label, value, mono = true, highlight = false) => {
+                if (value === undefined || value === null || value === '') return '';
+                const valClass = `detail-value ${highlight ? 'text-emerald-400 font-semibold' : ''} ${!mono ? '!font-sans' : ''}`;
+                return `<div class="detail-row">
+                    <span class="detail-label">${label}</span>
+                    <span class="${valClass}">${value}</span>
+                </div>`;
+            };
+            const section = (title, icon, rows) => {
+                const content = rows.filter(Boolean).join('');
+                if (!content) return '';
+                return `<div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-solid ${icon} text-xs text-slate-500 w-3"></i>
+                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">${title}</p>
+                    </div>
+                    <div class="bg-slate-800/40 rounded-lg px-3 border border-slate-700/40">${content}</div>
+                </div>`;
+            };
+            const copyBtn = (label, val) =>
+                `<button onclick="navigator.clipboard.writeText('${val.replace(/'/g,"\\'")}').then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\'></i> Copied!';setTimeout(()=>{this.innerHTML='<i class=\\'fa-solid fa-copy\\'></i> ${label}'},1500)})"
+                    class="text-[10px] px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600/60 border border-slate-600/40 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-copy text-xs"></i> ${label}
+                </button>`;
+
+            // ── Build section content ────────────────────────────────────────
+            const formatDate = (d) => d ? new Date(d).toLocaleString('en-GB', { dateStyle:'medium', timeStyle:'short' }) : null;
+            const stateLabel = state.replace(/_/g,' ').toUpperCase();
+
+            const identity = section('Identity', 'fa-fingerprint', [
+                row('Resource ID', r.id),
+                row('Name', r.name, false),
+                row('Service', r.service, false),
+                row('Group', r.group, false),
+                row('Type', r.type, false),
+                row('Region', r.region),
+                row('State', stateLabel, false, state === 'running' || state === 'available'),
+            ]);
+
+            const network = (r.publicIp && r.publicIp !== 'N/A' && r.publicIp !== 'N/A (Object Storage)' && r.publicIp !== 'N/A (Infrastructure Stack)' && r.publicIp !== 'N/A (Serverless)')
+                ? section('Network', 'fa-network-wired', [
+                    row('Endpoint / IP', r.publicIp),
+                  ])
+                : '';
+
+            const compute = (r.type && r.service === 'EC2')
+                ? section('Compute', 'fa-microchip', [
+                    row('Instance Type', r.type),
+                    row('Launch Time', formatDate(r.launchTime), false),
+                  ])
+                : '';
+
+            const costSection = section('Cost', 'fa-dollar-sign', [
+                row('Est. Monthly', '$' + (r.costEstimate || '0.00'), false, cost > 0),
+                row('Last Month Cost', '$' + (r.lastMonthCost || '0.00')),
+                row('Last Month Usage', r.lastMonthUsage),
+            ]);
+
+            const metadata = section('Metadata', 'fa-tag', [
+                r.launchTime && r.service !== 'EC2' ? row('Created', formatDate(r.launchTime), false) : '',
+                r.functionUrl ? row('Function URL', r.functionUrl) : '',
+                r.cfnStatus ? row('CFN Status', r.cfnStatus.replace(/_/g,' ')) : '',
+                r.roleName ? row('Role', r.roleName) : '',
+                r.vpcName ? row('VPC', r.vpcName) : '',
+            ]);
+
+            // Service-specific extra sections
+            let extra = '';
+            if (r.service === 'EKS') {
+                extra = section('EKS Cluster', 'fa-dharmachakra', [
+                    row('Version', r.version),
+                    row('Endpoint', r.endpoint),
+                    row('Nodes', r.nodeCount != null ? r.nodeCount + ' node(s)' : null),
+                    row('VPC', r.vpcName),
+                ]);
+            } else if (r.service === 'Lambda') {
+                extra = section('Lambda', 'fa-bolt', [
+                    row('Runtime', r.runtime),
+                    row('Memory', r.memorySize ? r.memorySize + ' MB' : null),
+                    row('Timeout', r.timeout ? r.timeout + 's' : null),
+                    row('Function URL', r.functionUrl),
+                ]);
+            } else if (r.service === 'RDS' || r.service === 'RDS Aurora') {
+                extra = section('Database', 'fa-database', [
+                    row('Engine', r.engine),
+                    row('Endpoint', r.publicIp),
+                    row('Instance Class', r.instanceClass),
+                ]);
+            } else if (r.service === 'CloudFormation') {
+                extra = section('CloudFormation', 'fa-layer-group', [
+                    row('Status', (r.cfnStatus || '').replace(/_/g,' ')),
+                    row('Stack ID', r.id, true),
+                ]);
+            } else if (r.service === 'IAM Role' || r.service === 'IAM User') {
+                extra = section('IAM', 'fa-user-shield', [
+                    row('Path', r.type?.split('•')[1]?.trim()),
+                    row('Created', formatDate(r.launchTime), false),
+                ]);
+            }
+
+            document.getElementById('rdp-body').innerHTML = identity + network + compute + extra + costSection + metadata;
+
+            // ── Footer actions ────────────────────────────────────────────────
+            const actions = [];
+            if (r.id) actions.push(copyBtn('Copy ID', r.id));
+            if (r.service === 'EKS') {
+                actions.push(`<button onclick="showView('k8s');closeResourceDetail()"
+                    class="text-[10px] px-3 py-1.5 rounded-lg bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-700/40 text-cyan-300 transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-dharmachakra text-xs"></i> Open Kubernetes View
+                </button>`);
+            }
+            if (r.service === 'Lambda' && r.functionUrl) {
+                actions.push(`<a href="${r.functionUrl}" target="_blank"
+                    class="text-[10px] px-3 py-1.5 rounded-lg bg-violet-900/40 hover:bg-violet-800/60 border border-violet-700/40 text-violet-300 transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i> Open Function URL
+                </a>`);
+            }
+            if (r.publicIp && r.publicIp.startsWith('http')) {
+                actions.push(`<a href="${r.publicIp}" target="_blank"
+                    class="text-[10px] px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600/60 border border-slate-600/40 text-slate-300 transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i> Open Endpoint
+                </a>`);
+            }
+            if (r.id && (r.id.startsWith('arn:') || r.service === 'EKS' || r.service === 'Lambda')) {
+                const consoleMap = {
+                    'EKS':    `https://eu-west-2.console.aws.amazon.com/eks/home?region=eu-west-2#/clusters/${encodeURIComponent(r.name)}`,
+                    'Lambda': `https://eu-west-2.console.aws.amazon.com/lambda/home?region=eu-west-2#/functions/${encodeURIComponent(r.name)}`,
+                    'RDS':    `https://eu-west-2.console.aws.amazon.com/rds/home?region=eu-west-2#database:id=${encodeURIComponent(r.name)}`,
+                    'S3':     `https://s3.console.aws.amazon.com/s3/buckets/${encodeURIComponent(r.name)}`,
+                    'EC2':    `https://eu-west-2.console.aws.amazon.com/ec2/home?region=eu-west-2#Instances:instanceId=${encodeURIComponent(r.id)}`,
+                };
+                const url = consoleMap[r.service];
+                if (url) actions.push(`<a href="${url}" target="_blank"
+                    class="text-[10px] px-3 py-1.5 rounded-lg bg-orange-900/30 hover:bg-orange-800/40 border border-orange-700/30 text-orange-300 transition-colors flex items-center gap-1.5">
+                    <i class="fa-brands fa-aws text-xs"></i> Open in AWS Console
+                </a>`);
+            }
+            document.getElementById('rdp-footer').innerHTML = actions.join('');
+
+            // ── Show panel ───────────────────────────────────────────────────
+            document.getElementById('resource-detail-panel').classList.add('open');
+            document.getElementById('resource-detail-backdrop').classList.add('open');
+        }
+
+        // ──────────────────────────────────────────────────────────────────────
         async function fetchResources() {
             try {
                 const res = await fetch('/api/resources');
@@ -942,8 +1215,14 @@
                             const cfnSpinner = isCFN && isCreating
                                 ? `<i class="fa-solid fa-gear animate-spin text-amber-400 text-xs shrink-0"></i>` : '';
 
+                            // Store resource in global map for detail panel
+                            const safeId = CSS.escape ? inst.id : inst.id;
+                            window._resourceMap = window._resourceMap || {};
+                            window._resourceMap[inst.id] = inst;
+
                             return `
-                                <div class="${cardBg} p-3.5 rounded-lg border ${cardBorder} card-hover overflow-hidden">
+                                <div class="${cardBg} p-3.5 rounded-lg border ${cardBorder} card-hover overflow-hidden cursor-pointer select-none"
+                                     onclick="showResourceDetail(${JSON.stringify(inst.id)})">
                                     <div class="flex items-start gap-2 min-w-0">
                                         <div class="flex-1 min-w-0 overflow-hidden">
                                             <div class="flex items-center gap-1.5 flex-wrap mb-1">
@@ -1040,94 +1319,301 @@
         function exportPDF() {
             const resources = window.dashboardState?.resources || [];
             if (resources.length === 0) {
-                alert("No resources available to export.");
+                alert('No resources available to export.');
                 return;
             }
-            
+
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
-            
-            // Header styling
-            doc.setFillColor(15, 23, 42); // Dark slate bg
-            doc.rect(0, 0, 210, 40, 'F');
-            
-            doc.setTextColor(255, 255, 255);
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(22);
-            doc.text("AWS RESOURCE SPENDING REPORT", 15, 20);
-            
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(10);
-            doc.setTextColor(148, 163, 184); // muted slate
-            doc.text(`Generated on: ${new Date().toLocaleString()} • Synechron Profile`, 15, 30);
-            
-            // Table headers
-            let y = 50;
-            doc.setFillColor(30, 41, 59); // lighter slate
-            doc.rect(10, y, 190, 8, 'F');
-            
-            doc.setTextColor(255, 255, 255);
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(9);
-            doc.text("Service", 12, y + 5);
-            doc.text("Resource Name / ID", 35, y + 5);
-            doc.text("Type", 95, y + 5);
-            doc.text("Est. Mo. Cost", 135, y + 5);
-            doc.text("Last Month Cost & Usage", 160, y + 5);
-            
-            y += 8;
-            
-            // Rows
-            doc.setTextColor(15, 23, 42);
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(8);
-            
-            resources.forEach((r, idx) => {
-                if (idx % 2 === 1) {
-                    doc.setFillColor(248, 250, 252); // Alternating light gray
-                    doc.rect(10, y, 190, 10, 'F');
-                }
-                
-                doc.setFont("helvetica", "bold");
-                doc.text(r.service || 'EC2', 12, y + 6);
-                
-                doc.setFont("helvetica", "normal");
-                const displayName = r.name.length > 25 ? r.name.substring(0, 22) + "..." : r.name;
-                doc.text(displayName, 35, y + 4);
-                doc.setFontSize(7);
-                doc.setTextColor(100, 116, 139);
-                doc.text(r.id, 35, y + 8);
-                
+            const W = 210, MARGIN = 12, CONTENT_W = W - MARGIN * 2;
+
+            // ── Colour palette ─────────────────────────────────────────────────
+            const C = {
+                headerBg:    [15,  23,  42],   // slate-900
+                headerText:  [255, 255, 255],
+                subheadBg:   [30,  41,  59],   // slate-800
+                subheadText: [255, 255, 255],
+                groupBg:     [51,  65,  85],   // slate-700
+                groupText:   [203, 213, 225],
+                rowEven:     [248, 250, 252],   // slate-50
+                rowOdd:      [255, 255, 255],
+                bodyText:    [15,  23,  42],
+                mutedText:   [100, 116, 139],
+                green:       [16,  185, 129],
+                amber:       [245, 158, 11],
+                border:      [203, 213, 225],
+                accentBg:    [240, 253, 250],
+            };
+            const setFill  = (c) => doc.setFillColor(...c);
+            const setColor = (c) => doc.setTextColor(...c);
+            const setDraw  = (c) => doc.setDrawColor(...c);
+
+            // ── Column definitions ─────────────────────────────────────────────
+            // x positions and max character widths (to drive truncation)
+            const COLS = [
+                { label: 'Group',      x: MARGIN,      w: 24,  chars: 14 },
+                { label: 'Service',    x: MARGIN + 26, w: 22,  chars: 13 },
+                { label: 'Name',       x: MARGIN + 50, w: 44,  chars: 24 },
+                { label: 'State',      x: MARGIN + 96, w: 18,  chars: 10 },
+                { label: 'Type / ID',  x: MARGIN + 116,w: 36,  chars: 20 },
+                { label: 'Est./mo',    x: MARGIN + 154,w: 20,  chars: 10 },
+                { label: 'Last mo.',   x: MARGIN + 175,w: 21,  chars: 11 },
+            ];
+
+            const clip = (str, maxLen) => {
+                const s = (str || '—').toString();
+                return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
+            };
+
+            // ── Helpers ────────────────────────────────────────────────────────
+            let y = 0;
+            let pageNum = 1;
+
+            const drawPageHeader = () => {
+                setFill(C.headerBg);
+                doc.rect(0, 0, W, 32, 'F');
+                // Orange AWS accent bar
+                setFill([255, 153, 0]);
+                doc.rect(0, 30, W, 2, 'F');
+
+                setColor(C.headerText);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text('AWS RESOURCE REPORT', MARGIN, 13);
+
+                doc.setFont('helvetica', 'normal');
                 doc.setFontSize(8);
-                doc.setTextColor(15, 23, 42);
-                doc.text(r.type || 'N/A', 95, y + 6);
-                doc.text(`$${r.costEstimate || '0.00'}`, 135, y + 6);
-                doc.text(`$${r.lastMonthCost} (${r.lastMonthUsage})`, 160, y + 6);
-                
-                y += 10;
-                
-                // Add new page if we run out of vertical space
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
-                    // Redraw table headers on new page
-                    doc.setFillColor(30, 41, 59);
-                    doc.rect(10, y, 190, 8, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFont("helvetica", "bold");
-                    doc.text("Service", 12, y + 5);
-                    doc.text("Resource Name / ID", 35, y + 5);
-                    doc.text("Type", 95, y + 5);
-                    doc.text("Est. Mo. Cost", 135, y + 5);
-                    doc.text("Last Month Cost & Usage", 160, y + 5);
-                    y += 8;
-                    doc.setTextColor(15, 23, 42);
-                    doc.setFont("helvetica", "normal");
-                }
+                setColor([148, 163, 184]);
+                doc.text(`Generated: ${new Date().toLocaleString('en-GB')}   •   Total resources: ${resources.length}`, MARGIN, 22);
+                // Page number top-right
+                doc.setFontSize(8);
+                doc.text(`Page ${pageNum}`, W - MARGIN, 22, { align: 'right' });
+            };
+
+            const drawColHeaders = () => {
+                setFill(C.subheadBg);
+                doc.rect(MARGIN - 1, y, CONTENT_W + 2, 7, 'F');
+                setColor(C.subheadText);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7);
+                COLS.forEach(col => doc.text(col.label, col.x, y + 4.8));
+                y += 7;
+            };
+
+            const drawPageFooter = () => {
+                const footerY = 290;
+                setDraw(C.border);
+                doc.setLineWidth(0.2);
+                doc.line(MARGIN, footerY, W - MARGIN, footerY);
+                setColor(C.mutedText);
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(7);
+                doc.text('AWS Operations Dashboard — Confidential', MARGIN, footerY + 4);
+                doc.text(`${pageNum}`, W - MARGIN, footerY + 4, { align: 'right' });
+            };
+
+            const newPage = () => {
+                drawPageFooter();
+                doc.addPage();
+                pageNum++;
+                drawPageHeader();
+                y = 38;
+                drawColHeaders();
+            };
+
+            const checkY = (neededH = 13) => {
+                if (y + neededH > 283) newPage();
+            };
+
+            // ── PAGE 1: Summary ────────────────────────────────────────────────
+            drawPageHeader();
+            y = 38;
+
+            // Summary stats
+            const totalCost = resources.reduce((s, r) => s + parseFloat(r.costEstimate || 0), 0);
+            const lastMonthTotal = resources.reduce((s, r) => s + parseFloat(r.lastMonthCost || 0), 0);
+            const byGroup = {};
+            resources.forEach(r => {
+                const g = r.group || 'Other';
+                byGroup[g] = byGroup[g] || { count: 0, cost: 0 };
+                byGroup[g].count++;
+                byGroup[g].cost += parseFloat(r.costEstimate || 0);
             });
-            
-            doc.save(`aws_resources_spending_report_${new Date().toISOString().split('T')[0]}.pdf`);
+
+            // Summary banner
+            const bannerItems = [
+                { label: 'Total Resources', value: resources.length.toString() },
+                { label: 'Est. Monthly Cost', value: `$${totalCost.toFixed(2)}` },
+                { label: 'Last Month Cost',  value: `$${lastMonthTotal.toFixed(2)}` },
+                { label: 'Service Groups',   value: Object.keys(byGroup).length.toString() },
+            ];
+            const bw = CONTENT_W / bannerItems.length;
+            bannerItems.forEach((item, i) => {
+                const bx = MARGIN + i * bw;
+                setFill(i === 1 ? [6, 78, 59] : [30, 41, 59]);
+                doc.roundedRect(bx, y, bw - 2, 18, 2, 2, 'F');
+                setColor(i === 1 ? C.green : C.subheadText);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(11);
+                doc.text(item.value, bx + bw / 2 - 1, y + 10, { align: 'center' });
+                setColor(C.mutedText);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7);
+                doc.text(item.label, bx + bw / 2 - 1, y + 16, { align: 'center' });
+            });
+            y += 24;
+
+            // Group breakdown table
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            setColor(C.bodyText);
+            doc.text('RESOURCE BREAKDOWN BY GROUP', MARGIN, y);
+            y += 4;
+            setDraw(C.border);
+            doc.setLineWidth(0.3);
+            doc.line(MARGIN, y, W - MARGIN, y);
+            y += 3;
+
+            Object.entries(byGroup).sort((a,b) => b[1].cost - a[1].cost).forEach(([g, d], idx) => {
+                if (idx % 2 === 0) { setFill(C.rowEven); doc.rect(MARGIN - 1, y, CONTENT_W + 2, 7, 'F'); }
+                setColor(C.bodyText);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.text(g, MARGIN + 1, y + 5);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`${d.count} resource${d.count !== 1 ? 's' : ''}`, MARGIN + 60, y + 5);
+                setColor(d.cost > 0 ? C.green : C.mutedText);
+                doc.text(`$${d.cost.toFixed(2)}/mo`, W - MARGIN, y + 5, { align: 'right' });
+                y += 7;
+            });
+
+            y += 6;
+            setDraw(C.border);
+            doc.line(MARGIN, y, W - MARGIN, y);
+            y += 8;
+
+            // ── RESOURCE TABLE header ──────────────────────────────────────────
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            setColor(C.bodyText);
+            doc.text('FULL RESOURCE LIST', MARGIN, y);
+            y += 5;
+            drawColHeaders();
+
+            // ── RESOURCE TABLE rows ────────────────────────────────────────────
+            // Group resources
+            const grouped = {};
+            resources.forEach(r => {
+                const g = r.group || 'Other';
+                (grouped[g] = grouped[g] || []).push(r);
+            });
+
+            Object.entries(grouped).forEach(([groupName, items]) => {
+                checkY(10);
+                // Group separator row
+                setFill(C.groupBg);
+                doc.rect(MARGIN - 1, y, CONTENT_W + 2, 6, 'F');
+                setColor(C.groupText);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7.5);
+                doc.text(`  ${groupName.toUpperCase()}  —  ${items.length} resource${items.length !== 1 ? 's' : ''}`, MARGIN + 1, y + 4.3);
+                const groupCost = items.reduce((s, r) => s + parseFloat(r.costEstimate || 0), 0);
+                if (groupCost > 0) {
+                    setColor(C.green);
+                    doc.text(`$${groupCost.toFixed(2)}/mo`, W - MARGIN, y + 4.3, { align: 'right' });
+                }
+                y += 6;
+
+                items.forEach((r, idx) => {
+                    checkY(12);
+                    const rowH = 11;
+
+                    // Alternating row background
+                    if (idx % 2 === 0) {
+                        setFill(C.rowEven);
+                    } else {
+                        setFill(C.rowOdd);
+                    }
+                    doc.rect(MARGIN - 1, y, CONTENT_W + 2, rowH, 'F');
+
+                    // State dot color
+                    const state = (r.state || 'running').toLowerCase();
+                    const dotColor = ['stopped','failed'].includes(state) ? C.amber :
+                                    ['creating','pending','updating'].includes(state) ? [245,158,11] : C.green;
+
+                    // Draw a small colored dot for state
+                    setFill(dotColor);
+                    doc.circle(COLS[3].x + 1.5, y + rowH / 2, 1, 'F');
+
+                    // ── Column content ──────────────────────────────────────────
+                    doc.setFontSize(7.5);
+                    doc.setFont('helvetica', 'normal');
+
+                    // Col 0: Group (muted, skipped — shown in group header)
+                    // Col 1: Service (bold)
+                    setColor(C.bodyText);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(clip(r.service, COLS[1].chars), COLS[1].x, y + 4.5);
+
+                    // Col 2: Name (top line) + ID (bottom line, muted, tiny)
+                    doc.setFont('helvetica', 'normal');
+                    setColor(C.bodyText);
+                    doc.setFontSize(7.5);
+                    doc.text(clip(r.name, COLS[2].chars), COLS[2].x, y + 4);
+                    doc.setFontSize(6);
+                    setColor(C.mutedText);
+                    // Show tail of ID (last 22 chars for long ARNs)
+                    const idDisplay = r.id.length > 22 ? '…' + r.id.slice(-21) : r.id;
+                    doc.text(idDisplay, COLS[2].x, y + 8.5);
+
+                    // Col 3: State text (after dot)
+                    doc.setFontSize(7);
+                    setColor(state === 'running' ? C.green : C.mutedText);
+                    doc.text(clip(state.toUpperCase(), 8), COLS[3].x + 4, y + 4.5);
+
+                    // Col 4: Type (top) 
+                    doc.setFontSize(7);
+                    setColor(C.bodyText);
+                    doc.text(clip(r.type || '—', COLS[4].chars), COLS[4].x, y + 4.5);
+
+                    // Col 5: Est. Cost
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(7.5);
+                    const costVal = parseFloat(r.costEstimate || 0);
+                    setColor(costVal > 0 ? C.green : C.mutedText);
+                    doc.text(`$${r.costEstimate || '0.00'}`, COLS[5].x + COLS[5].w - 2, y + 4.5, { align: 'right' });
+
+                    // Col 6: Last Month Cost
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7);
+                    setColor(C.mutedText);
+                    doc.text(`$${r.lastMonthCost || '0.00'}`, COLS[6].x + COLS[6].w - 2, y + 4.5, { align: 'right' });
+
+                    y += rowH;
+                });
+
+                y += 2; // gap after each group
+            });
+
+            // ── Totals footer row ──────────────────────────────────────────────
+            checkY(12);
+            setFill(C.subheadBg);
+            doc.rect(MARGIN - 1, y, CONTENT_W + 2, 9, 'F');
+            setColor(C.headerText);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text('TOTAL', MARGIN + 1, y + 6);
+            doc.text(`${resources.length} resources`, COLS[2].x, y + 6);
+            setColor(C.green);
+            doc.text(`$${totalCost.toFixed(2)}`, COLS[5].x + COLS[5].w - 2, y + 6, { align: 'right' });
+            setColor([148, 163, 184]);
+            doc.text(`$${lastMonthTotal.toFixed(2)}`, COLS[6].x + COLS[6].w - 2, y + 6, { align: 'right' });
+            y += 9;
+
+            drawPageFooter();
+            doc.save(`aws_resources_report_${new Date().toISOString().split('T')[0]}.pdf`);
         }
+
 
         async function refreshProjects() {
             const grid = document.getElementById('projects-grid');
