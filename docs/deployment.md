@@ -6,7 +6,7 @@ This document details how to package the AWS Status Dashboard into a production-
 
 The dashboard is packaged using a multi-stage `Dockerfile`:
 1. **Builder Stage**: Uses Node.js Alpine to copy dependency specs and install production dependencies via `npm ci --omit=dev`.
-2. **Runner Stage**: Copy dependencies and codes into a clean runtime container, exposing port `3000`.
+2. **Runner Stage**: Copy dependencies and codes into a clean runtime container, exposing port `8889`.
 
 ---
 
@@ -30,7 +30,7 @@ Mount your `~/.aws` directory into the container:
 
 ```bash
 docker run -d \
-  -p 3000:3000 \
+  -p 8889:8889 \
   -v "$HOME/.aws:/root/.aws:ro" \
   -e AWS_PROFILE=Synechron \
   --name aws-dashboard \
@@ -43,7 +43,7 @@ If you do not want to mount local configuration, pass explicit credentials direc
 
 ```bash
 docker run -d \
-  -p 3000:3000 \
+  -p 8889:8889 \
   -e AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
   -e AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
   -e AWS_DEFAULT_REGION=us-east-1 \
@@ -56,5 +56,5 @@ docker run -d \
 ## Accessing the Dashboard
 
 Once the container is running:
-- Open your browser and go to `http://localhost:3000`.
+- Open your browser and go to `http://localhost:8889`.
 - Log in and verify EC2 resources and CloudTrail events.

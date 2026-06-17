@@ -67,6 +67,7 @@
     el.statSecurityAlerts = document.getElementById('stat-security-alerts');
     el.statTotalStars = document.getElementById('stat-total-stars');
     el.overviewWorkflowsTbody = document.getElementById('overview-workflows-tbody');
+    el.overviewReposTbody = document.getElementById('overview-repos-tbody');
     
     // Workflows View
     el.workflowsRepoSelect = document.getElementById('workflows-repo-select');
@@ -219,41 +220,13 @@
     setupEventListeners();
     setupAutoRefresh();
 
-    // Check if redirect contains OAuth code
+    // Check if redirect contains OAuth token
     const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
+    const tokenParam = urlParams.get('token');
     
-    if (code) {
-      // Clear code query param from address bar
+    if (tokenParam) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      showView('setup');
-      if (el.authErrorMsg) {
-        el.authErrorMsg.textContent = 'Exchanging authorization code...';
-        el.authErrorMsg.className = 'badge badge-info';
-        el.authErrorMsg.style.display = 'block';
-      }
-      
-      try {
-        const res = await fetch('http://localhost:8765/oauth/exchange', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: code })
-        });
-        
-        const data = await res.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        
-        if (data.access_token) {
-          validateAndConnect(data.access_token, true);
-        }
-      } catch (err) {
-        if (el.authErrorMsg) {
-          el.authErrorMsg.textContent = `OAuth connection failed: ${err.message}. Make sure node mcp-bridge.js is running.`;
-          el.authErrorMsg.className = 'badge badge-danger';
-        }
-      }
+      validateAndConnect(tokenParam, true);
     } else if (state.token) {
       validateAndConnect(state.token, false);
     } else {
@@ -266,10 +239,10 @@
 
   async function checkOauthBridgeAvailability() {
     try {
-      const res = await fetch('http://localhost:8765/config');
+      const res = await fetch('/api/auth/config');
       const data = await res.json();
-      if (data.client_id) {
-        state.oauthClientId = data.client_id;
+      if (data.githubEnabled) {
+        state.oauthClientId = 'enabled';
         if (el.oauthLoginContainer) {
           el.oauthLoginContainer.style.display = 'block';
         }
@@ -284,16 +257,32 @@
   // --- THEME MANAGEMENT ---
   function setupTheme() {
     document.documentElement.setAttribute('data-theme', state.theme);
-    if (el.themeToggle) {
-      el.themeToggle.checked = (state.theme === 'light');
+    updateThemeIcon(state.theme);
+  }
+
+  function updateThemeIcon(theme) {
+    const iconEl = document.getElementById('theme-toggle-icon');
+    if (iconEl) {
+      if (theme === 'light') {
+        iconEl.className = 'fa-solid fa-sun text-amber-500';
+      } else {
+        iconEl.className = 'fa-solid fa-moon text-primary';
+      }
     }
   }
 
-  function toggleTheme() {
+  window.toggleTheme = function() {
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('theme', state.theme);
-    document.documentElement.setAttribute('data-theme', state.theme);
-  }
+    setupTheme();
+  };
+
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'theme') {
+      state.theme = e.newValue || 'dark';
+      setupTheme();
+    }
+  });
 
   // --- NAVIGATION & VIEWS ---
   function setupNavigation() {
@@ -385,9 +374,8 @@
     }
     if (el.btnOauthLogin) {
       el.btnOauthLogin.addEventListener('click', function () {
-        if (!state.oauthClientId) return;
-        const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
-        window.location.href = `https://github.com/login/oauth/authorize?client_id=${state.oauthClientId}&scope=repo,workflow,security_events&redirect_uri=${redirectUri}`;
+        const redirectPath = window.location.pathname;
+        window.location.href = `/api/auth/github?redirect=${encodeURIComponent(redirectPath)}`;
       });
     }
 
@@ -879,6 +867,9 @@
       // 1. Fetch Repositories
       const repos = await ghFetch('/user/repos?sort=updated&per_page=100');
       state.repos = repos;
+      try {
+        localStorage.setItem('gh_active_repos', JSON.stringify(repos || []));
+      } catch(e) { console.error(e); }
       
       // Calculate total stars
       state.totalStars = repos.reduce((acc, repo) => acc + (repo.stargazers_count || 0), 0);
@@ -900,6 +891,9 @@
       );
       const prsResults = await Promise.all(prsPromises);
       state.prs = prsResults.flatMap(res => res.items || []);
+      try {
+        localStorage.setItem('gh_active_prs', JSON.stringify(state.prs || []));
+      } catch(e) { console.error(e); }
       const totalPrsCount = prsResults.reduce((acc, res) => acc + (res.total_count || 0), 0);
       el.statActivePrs.textContent = totalPrsCount !== undefined ? totalPrsCount : state.prs.length;
 
@@ -909,6 +903,9 @@
       );
       const issuesResults = await Promise.all(issuesPromises);
       state.issues = issuesResults.flatMap(res => res.items || []);
+      try {
+        localStorage.setItem('gh_active_issues', JSON.stringify(state.issues || []));
+      } catch(e) { console.error(e); }
       const totalIssuesCount = issuesResults.reduce((acc, res) => acc + (res.total_count || 0), 0);
       el.statOpenIssues.textContent = totalIssuesCount !== undefined ? totalIssuesCount : state.issues.length;
 
@@ -972,8 +969,51 @@
 
   // --- COMPONENT RENDERING ---
 
+  // Render Repository Overview Table on Overview Tab
+  function renderRepositoryOverview() {
+    if (!el.overviewReposTbody) return;
+    if (state.repos.length === 0) {
+      el.overviewReposTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--fg-secondary);">No repositories found. Connect token to load repositories.</td></tr>`;
+      return;
+    }
+
+    el.overviewReposTbody.innerHTML = state.repos.map(repo => {
+      const isFollowed = state.followedRepos.includes(repo.full_name);
+      const followIcon = isFollowed ? 'fa-solid fa-bell' : 'fa-regular fa-bell';
+      const followColor = isFollowed ? 'color: var(--yellow);' : 'color: var(--fg-secondary);';
+      const followTitle = isFollowed ? 'Stop tracking this project' : 'Track and get notifications for this project';
+
+      return `
+        <tr>
+          <td style="text-align: center; vertical-align: middle;">
+            <button class="btn btn-sm btn-icon" onclick="toggleFollowRepo('${repo.full_name}')" style="margin: 0; padding: 4px 8px; ${followColor}" title="${followTitle}">
+              <i class="${followIcon}"></i>
+            </button>
+          </td>
+          <td>
+            <strong><a href="${repo.html_url}" target="_blank">${repo.name}</a></strong>
+            ${repo.private ? '<span class="badge badge-neutral" style="margin-left: 8px; font-size: 10px; padding: 2px 4px;">Private</span>' : '<span class="badge badge-info" style="margin-left: 8px; font-size: 10px; padding: 2px 4px;">Public</span>'}
+          </td>
+          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${repo.description || 'No description'}">
+            <span class="card-desc">${repo.description || 'No description provided.'}</span>
+          </td>
+          <td><span class="badge badge-neutral">${repo.language || 'N/A'}</span></td>
+          <td>
+            <div style="display: flex; gap: 12px; font-size: 12px; color: var(--fg-secondary); align-items: center;">
+              <span><i class="fa-solid fa-star" style="color: var(--yellow);"></i> ${repo.stargazers_count || 0}</span>
+              <span><i class="fa-solid fa-code-fork"></i> ${repo.forks_count || 0}</span>
+              <span><i class="fa-solid fa-eye"></i> ${repo.watchers_count || 0}</span>
+            </div>
+          </td>
+          <td>${formatRelativeTime(repo.updated_at)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
   // Overview
   function renderOverview() {
+    renderRepositoryOverview();
     if (state.prs.length === 0 && Object.keys(state.workflowRuns).length === 0) return;
 
     // Running workflows calculations
@@ -2209,6 +2249,8 @@
         return;
       }
       updateCopilotStatus('connected', 'Connected (GitHub Models)');
+    } else if (provider === 'gemini' || provider === 'claude') {
+      updateCopilotStatus('connected', `Local AI: ${provider === 'gemini' ? 'Gemini' : 'Claude'}`);
     } else if (provider === 'github-copilot') {
       const copilotToken = localStorage.getItem('gh_copilot_pat') || state.token;
       if (!copilotToken) {
@@ -2269,6 +2311,61 @@ ${issuesSummary || 'None'}
 ${runsSummary.slice(0, 10).join('\n') || 'None'}
 
 Use this information to answer user questions about tasks, pull requests, issues, pipeline runs, and general repository status. Keep your responses helpful, concise, and formatted in Markdown.`;
+  }
+
+  async function getBestOllamaModel(providerVal, url) {
+    try {
+      const res = await fetch(`${url}/api/tags`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const models = data.models || [];
+      if (models.length === 0) return null;
+      
+      // Filter out embedding models
+      const activeModels = models.filter(m => {
+        const capabilities = m.capabilities || [];
+        const details = m.details || {};
+        const name = m.name.toLowerCase();
+        return !name.includes('embedding') && (capabilities.includes('completion') || !details.family || details.family !== 'bert');
+      });
+      
+      if (activeModels.length === 0) return models[0].name;
+
+      // If the user has a configured custom model in localStorage, try that first for "ollama"
+      if (providerVal === 'ollama') {
+        const customModel = localStorage.getItem('copilot_ollama_model');
+        if (customModel && activeModels.some(m => m.name === customModel)) {
+          return customModel;
+        }
+      }
+
+      // Try to match by brand
+      let brandKeywords = [];
+      if (providerVal === 'gemini') {
+        brandKeywords = ['gemma', 'gemini'];
+      } else if (providerVal === 'claude') {
+        brandKeywords = ['llama', 'claude'];
+      }
+
+      // 1st pass: search for brand keyword match
+      for (const kw of brandKeywords) {
+        const match = activeModels.find(m => m.name.toLowerCase().includes(kw));
+        if (match) return match.name;
+      }
+
+      // 2nd pass: search for qwen or llama if brand match didn't find anything
+      const fallbackKeywords = ['qwen', 'llama', 'gemma', 'mistral', 'phi'];
+      for (const kw of fallbackKeywords) {
+        const match = activeModels.find(m => m.name.toLowerCase().includes(kw));
+        if (match) return match.name;
+      }
+
+      // 3rd pass: default to first active model
+      return activeModels[0].name;
+    } catch (err) {
+      console.warn("Failed to query Ollama tags endpoint:", err);
+      return null;
+    }
   }
 
   async function sendCopilotMessage() {
@@ -2415,7 +2512,8 @@ Use this information to answer user questions about tasks, pull requests, issues
       try {
         updateCopilotStatus('loading', 'Ollama thinking...');
         const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
-        const model = localStorage.getItem('copilot_ollama_model') || 'llama3';
+        const configuredModel = localStorage.getItem('copilot_ollama_model') || 'llama3';
+        const model = await getBestOllamaModel('ollama', url) || configuredModel;
         const systemMessage = getCopilotSystemMessage();
         
         const res = await fetch(`${url}/api/generate`, {
@@ -2449,6 +2547,93 @@ Use this information to answer user questions about tasks, pull requests, issues
           placeholder.innerHTML = `<span style="color: var(--red);">Ollama Error: ${escapeHtml(err.message)}</span>`;
         }
         updateCopilotStatus('disconnected', 'Ollama Error');
+      }
+    } else if (provider === 'gemini' || provider === 'claude') {
+      try {
+        updateCopilotStatus('loading', 'Local LLM thinking...');
+        const systemMessage = getCopilotSystemMessage();
+        let answer = '';
+        let handled = false;
+
+        // 1. Try browser-native window.ai
+        if (window.ai) {
+          try {
+            if (window.ai.languageModel && typeof window.ai.languageModel.create === 'function') {
+              const capabilities = await window.ai.languageModel.capabilities();
+              if (capabilities && capabilities.available !== 'no') {
+                const session = await window.ai.languageModel.create({
+                  systemPrompt: systemMessage
+                });
+                answer = await session.prompt(promptText);
+                handled = true;
+              }
+            } else if (window.ai.assistant && typeof window.ai.assistant.create === 'function') {
+              const capabilities = await window.ai.assistant.capabilities();
+              if (capabilities && capabilities.available !== 'no') {
+                const session = await window.ai.assistant.create({
+                  systemPrompt: systemMessage
+                });
+                answer = await session.prompt(promptText);
+                handled = true;
+              }
+            } else if (typeof window.ai.createTextSession === 'function') {
+              const session = await window.ai.createTextSession({
+                systemPrompt: systemMessage
+              });
+              answer = await session.prompt(promptText);
+              handled = true;
+            } else if (typeof window.ai.generateText === 'function') {
+              const res = await window.ai.generateText({
+                prompt: promptText,
+                systemPrompt: systemMessage
+              });
+              answer = res.text || res.output || res;
+              handled = true;
+            }
+          } catch (aiErr) {
+            console.warn("Attempt to use window.ai failed, falling back to local Ollama client...", aiErr);
+          }
+        }
+
+        // 2. Fall back to local Ollama client
+        if (!handled) {
+          const url = localStorage.getItem('copilot_ollama_url') || 'http://localhost:11434';
+          const model = await getBestOllamaModel(provider, url) || (provider === 'gemini' ? 'gemma2' : 'llama3');
+          
+          const res = await fetch(`${url}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: model,
+              system: systemMessage,
+              prompt: promptText,
+              stream: false
+            })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            answer = data.response || 'No response content';
+            handled = true;
+            updateCopilotStatus('connected', `Ollama: ${model}`);
+          } else {
+            throw new Error('Ollama returned status ' + res.status);
+          }
+        } else {
+          updateCopilotStatus('connected', `Local AI: ${provider === 'gemini' ? 'Gemini' : 'Claude'}`);
+        }
+
+        const placeholder = document.getElementById(responseId);
+        if (placeholder) {
+          placeholder.innerHTML = parseMarkdown(answer);
+        }
+      } catch (err) {
+        console.error(err);
+        const placeholder = document.getElementById(responseId);
+        if (placeholder) {
+          placeholder.innerHTML = `<span style="color: var(--red);">Local LLM Error: ${escapeHtml(err.message)}</span>`;
+        }
+        updateCopilotStatus('disconnected', 'Local LLM Error');
       }
     }
     
@@ -3147,6 +3332,7 @@ Use this information to answer user questions about tasks, pull requests, issues
     // Rerender
     renderStars();
     renderFollowedRepos();
+    renderRepositoryOverview();
     
     // Refresh to update monitored repos in background
     refreshDashboard();

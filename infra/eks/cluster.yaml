@@ -1,0 +1,74 @@
+---
+# Minimal EKS cluster — uses existing sarc-aws-vpc to avoid EIP quota
+# Cost: ~$73/mo (control plane) + ~$12/mo (1× t3.small spot) = ~$85/mo
+# Deploy:  just eks-create
+# Destroy: just eks-delete
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: sarc-portal-test
+  region: eu-west-2
+  version: "1.31"
+  tags:
+    Project: AWS-Dashboard
+    Environment: test
+    ManagedBy: eksctl
+
+# Reuse the existing VPC — no new NAT GW / EIPs needed
+vpc:
+  id: vpc-0af846fb76751da20
+  subnets:
+    public:
+      eu-west-2a:
+        id: subnet-0528d1fe81aa68c60
+      eu-west-2b:
+        id: subnet-093680026d9cb90f0
+      eu-west-2c:
+        id: subnet-044f2d56ead1d68c9
+    private:
+      eu-west-2a:
+        id: subnet-0314c086c94a288a3
+      eu-west-2b:
+        id: subnet-0597a3111d9243822
+      eu-west-2c:
+        id: subnet-04f36a3e1da303ca5
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: true
+
+# No CloudWatch logs (saves ~$2/mo per log group)
+cloudWatch:
+  clusterLogging:
+    enableTypes: []
+
+# IAM OIDC for service accounts
+iam:
+  withOIDC: true
+
+# Suppress auto-mode warning
+autoModeConfig:
+  enabled: false
+
+managedNodeGroups:
+  - name: ng-spot-small
+    instanceTypes:
+      - t3.small    # 2 vCPU / 2 GiB — minimum viable for EKS system pods
+      - t3.medium   # fallback spot capacity
+    spot: true      # ~70% cheaper than On-Demand
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 20  # GiB
+    # Place nodes in private subnets (existing NAT GW handles egress)
+    privateNetworking: true
+    labels:
+      role: worker
+      environment: test
+    tags:
+      Project: AWS-Dashboard
+      Environment: test
+    iam:
+      withAddonPolicies:
+        autoScaler: true

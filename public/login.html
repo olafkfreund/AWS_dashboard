@@ -90,6 +90,15 @@
                 <p id="github-info" class="text-[11px] text-slate-500 text-center mt-1.5"></p>
             </div>
 
+            <!-- GitLab Auth Method -->
+            <div id="gitlab-container" class="mt-4">
+                <button id="gitlab-login-btn" onclick="loginWithGitlab()" class="w-full bg-[#e24329] hover:bg-[#eb5f46] text-white font-medium py-3 px-4 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-3 border border-slate-700/50">
+                    <i class="fa-brands fa-gitlab text-xl"></i>
+                    <span>Login with GitLab</span>
+                </button>
+                <p id="gitlab-info" class="text-[11px] text-slate-500 text-center mt-1.5"></p>
+            </div>
+
             <!-- Separator -->
             <div class="flex items-center justify-center gap-3 my-6">
                 <div class="h-[1px] bg-slate-700/50 flex-grow"></div>
@@ -121,7 +130,7 @@
     </div>
 
     <script>
-        let config = { githubEnabled: false, githubHost: 'github.com' };
+        let config = { githubEnabled: false, githubHost: 'github.com', gitlabEnabled: false, gitlabHost: 'gitlab.com' };
 
         // Fetch auth configuration
         async function fetchConfig() {
@@ -136,15 +145,27 @@
                 const res = await fetch('/api/auth/config');
                 if (res.ok) {
                     config = await res.json();
-                    const btn = document.getElementById('github-login-btn');
-                    const info = document.getElementById('github-info');
                     
+                    // GitHub Configuration
+                    const ghBtn = document.getElementById('github-login-btn');
+                    const ghInfo = document.getElementById('github-info');
                     if (config.githubEnabled) {
-                        info.innerHTML = `Using configured provider: <code class="text-slate-400 font-mono">${config.githubHost}</code>`;
+                        ghInfo.innerHTML = `Using configured provider: <code class="text-slate-400 font-mono">${config.githubHost}</code>`;
                     } else {
-                        btn.disabled = true;
-                        btn.classList.add('opacity-40', 'cursor-not-allowed');
-                        info.innerHTML = `<span class="text-amber-500"><i class="fa-solid fa-triangle-exclamation mr-1"></i> GitHub Auth is not configured in .envrc</span>`;
+                        ghBtn.disabled = true;
+                        ghBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                        ghInfo.innerHTML = `<span class="text-amber-500"><i class="fa-solid fa-triangle-exclamation mr-1"></i> GitHub Auth is not configured</span>`;
+                    }
+
+                    // GitLab Configuration
+                    const glBtn = document.getElementById('gitlab-login-btn');
+                    const glInfo = document.getElementById('gitlab-info');
+                    if (config.gitlabEnabled) {
+                        glInfo.innerHTML = `Using configured provider: <code class="text-slate-400 font-mono">${config.gitlabHost}</code>`;
+                    } else {
+                        glBtn.disabled = true;
+                        glBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                        glInfo.innerHTML = `<span class="text-amber-500"><i class="fa-solid fa-triangle-exclamation mr-1"></i> GitLab Auth is not configured</span>`;
                     }
                 }
             } catch (e) {
@@ -157,36 +178,46 @@
             const message = document.getElementById('error-message');
             message.innerHTML = msg;
             alert.classList.remove('hidden');
+            alert.classList.remove('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
+            alert.classList.add('bg-red-900/40', 'border-red-500/50', 'text-red-200');
         }
 
-        async function triggerAwsSsoLogin() {
-            const alert = document.getElementById('error-alert');
-            const message = document.getElementById('error-message');
-            message.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary mr-2"></i> Launching AWS SSO browser login...`;
-            
-            try {
-                const response = await fetch('/api/auth/sso', { method: 'POST' });
-                const data = await response.json();
-                if (response.ok && data.success) {
-                    message.innerHTML = `<i class="fa-solid fa-circle-check text-green-500 mr-2"></i> AWS SSO login launched! Complete authentication in your browser window, then click <strong>Verify Active AWS SSO Session</strong> above.`;
-                } else {
-                    message.innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-500 mr-2"></i> Failed to launch SSO login: ${data.error || 'Unknown error'}`;
-                }
-            } catch (e) {
-                message.innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-500 mr-2"></i> Failed to connect to proxy server.`;
-            }
-        }
 
         function loginWithGithub() {
             if (!config.githubEnabled) return;
             window.location.href = '/api/auth/github';
         }
 
+        function loginWithGitlab() {
+            if (!config.gitlabEnabled) return;
+            window.location.href = '/api/auth/gitlab';
+        }
+
+        async function triggerAwsSsoLogin() {
+            const alert = document.getElementById('error-alert');
+            const message = document.getElementById('error-message');
+            message.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary mr-2"></i> Launching AWS SSO browser login...`;
+            alert.classList.remove('hidden');
+            alert.classList.remove('bg-red-900/40', 'border-red-500/50', 'text-red-200');
+            alert.classList.add('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
+            
+            try {
+                const response = await fetch('/api/auth/sso-refresh', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    message.innerHTML = `<i class="fa-solid fa-circle-check text-green-500 mr-2"></i> AWS SSO login launched! Complete authentication in your browser window, then click <strong>Verify Active AWS SSO Session</strong> above.`;
+                } else {
+                    showError("Failed to launch SSO login: " + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                showError("Failed to connect to proxy server.");
+            }
+        }
+
         async function loginWithAwsSso() {
             const btn = document.getElementById('aws-login-btn');
             const originalContent = btn.innerHTML;
             
-            // Set loading state
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary"></i> <span>Verifying credentials...</span>`;
             
@@ -207,7 +238,12 @@
                     }, 800);
                 } else {
                     const errorMsg = data.error || "AWS SSO verification failed.";
-                    showError(`${errorMsg} <a href="#" onclick="triggerAwsSsoLogin(); return false;" class="underline font-bold text-primary hover:text-primary/80">Click here to authenticate in browser</a>`);
+                    const alert = document.getElementById('error-alert');
+                    const message = document.getElementById('error-message');
+                    message.innerHTML = `${errorMsg} <a href="#" onclick="triggerAwsSsoLogin(); return false;" class="underline font-bold text-primary hover:text-primary/80">Click here to authenticate in browser</a>`;
+                    alert.classList.remove('hidden');
+                    alert.classList.remove('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
+                    alert.classList.add('bg-red-900/40', 'border-red-500/50', 'text-red-200');
                     btn.disabled = false;
                     btn.innerHTML = originalContent;
                 }

@@ -52,14 +52,18 @@ function compile(sourceDir, targetFile) {
     // Add cache busting to the script tags so the browser never uses old app.js
     combined = combined.replace(/src="assets\/js\/app\.js"/g, `src="assets/js/app.js?v=${Date.now()}"`);
     
-    // Inject Assistant Voice UI
+    // Inject Assistant Voice UI inside a relative wrapper for perfect positioning
     const micHtml = `
-      <button id="copilot-mic-btn" style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10;">
+      <button id="copilot-mic-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 5px; z-index: 10; outline: none;">
           <i class="fa-solid fa-microphone"></i>
       </button>
     `;
-    combined = combined.replace('class="copilot-chat-input-area">', 'class="copilot-chat-input-area" style="position: relative;">\n' + micHtml);
-    combined = combined.replace('id="copilot-chat-input"', 'id="copilot-chat-input" style="padding-right: 60px;"');
+    
+    combined = combined.replace(
+        /(<input type="text" class="copilot-chat-input" id="copilot-chat-input"[^>]*>)/,
+        '<div style="position: relative; flex-grow: 1; display: flex;">\n$1\n' + micHtml + '\n</div>'
+    );
+    combined = combined.replace('id="copilot-chat-input"', 'id="copilot-chat-input" style="width: 100%; padding-right: 40px; outline: none;"');
 
     const voiceToggleHtml = `
       <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px 12px; background: var(--bg-soft); border-bottom: 1px solid var(--border-color);">
@@ -133,5 +137,5 @@ function compile(sourceDir, targetFile) {
     console.log(`Compiled ${targetFile}`);
 }
 
-compile('/tmp/Huginn', '/home/olafkfreund/Source/Calitii/Synechron-ARC/AWS-dashboard/public/gitlab/index.html');
-compile('/tmp/Muninn', '/home/olafkfreund/Source/Calitii/Synechron-ARC/AWS-dashboard/public/github/index.html');
+compile('/tmp/Huginn', path.join(__dirname, 'public/gitlab/index.html'));
+compile('/tmp/Muninn', path.join(__dirname, 'public/github/index.html'));

@@ -1,59 +1,56 @@
-# NixOS & Development Shell
+# Nix Development Environment
 
-This project includes first-class support for NixOS and Nix-based systems using Nix Flakes and `devenv`.
+This project utilizes Nix Flakes and devenv to provide a declarative, reproducible development environment. 
 
-## Prerequisites
+## Why Nix is Chosen
 
-Ensure you have Nix installed with flakes enabled. If you are on NixOS, this is enabled by default. On other systems:
+Traditional development setups often suffer from environment drift, where differences in local operating systems, Node.js runtimes, and global CLI versions lead to subtle bugs or deployment failures. Nix solves this by managing dependencies at a low level, constructing isolated environments that behave identically across all platforms and CI/CD runners.
 
-```bash
-# Enable flakes in ~/.config/nix/nix.conf
-experimental-features = nix-command flakes
-```
+Nix provides the following key benefits:
+
+1. **Declarative Reproducibility**: The exact version of Node.js 22, the AWS CLI, and utility packages like just are locked down in devenv.nix. Any developer entering the repository will run identical binary toolchains.
+2. **Hermetic Isolation**: Dependencies are installed in the local project shell environment only. They do not pollute the global system path, preventing version conflicts with other projects.
+3. **Flake-pinned Versioning**: The flake.lock file locks the entire package ecosystem to a specific commit of nixpkgs. This ensures that every tool in the shell is exactly identical to the one tested in the CI pipeline.
+4. **Seamless Integration**: Automated loading of the Nix development shell on directory entry via direnv, meaning developers do not need to manually configure paths or run installation scripts.
 
 ---
 
-## Devenv Shell (`devenv.nix`)
+## Entering the Development Shell
 
-The development environment is configured declaratively in `devenv.nix`. It provides:
-1. **Node.js 20** with NPM pre-loaded.
-2. **AWS CLI v2** for credential and profile validation.
-3. A background process worker running the Node.js backend.
+You can enter the development environment using either devenv or standard Nix commands.
 
-### Commands
+### Option A: Using devenv
 
-To enter the shell manually:
+The devenv command tool provides process orchestration capabilities on top of Nix.
+
 ```bash
+# Enter the developer shell
 devenv shell
 ```
 
-To run the backend server in the background (using `process-compose` TUI):
+To run the Node.js backend proxy and track the dashboard service in the background:
+
 ```bash
 devenv up
 ```
 
----
+### Option B: Using Nix develop
 
-## Nix Flake Shell (`flake.nix`)
+If you prefer not to install the devenv tool globally, you can enter the development shell using standard Nix Flakes:
 
-For users who do not want to install `devenv` globally, the shell is exposed via a standard Nix Flake shell.
-
-To enter using vanilla Nix:
 ```bash
 nix develop
 ```
 
-This imports all of the dependencies defined in `devenv.nix` in an isolated development shell.
-
 ---
 
-## Direnv Integration
+## Direnv Automation
 
-The project includes an `.envrc` configuration that automatically loads the Nix environment whenever you navigate into the project directory:
+The project includes an .envrc configuration. If you have direnv installed on your machine, you can automate shell entry:
 
 ```bash
-# Authorize direnv once
+# Allow the project directory once
 direnv allow
 ```
 
-This loads Node.js and AWS CLI automatically into your active terminal session.
+Once authorized, your active shell will automatically load Node.js 22, the AWS CLI, just, and set the default environment variables (like PORT=8889 and AWS_PROFILE=Synechron) whenever you navigate into this project directory.
