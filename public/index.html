@@ -1657,6 +1657,12 @@
                 row('State', stateLabel, false, state === 'running' || state === 'available'),
             ]);
 
+            const lifecycle = section('Ownership & Lifecycle', 'fa-user-gear', [
+                row('Owner / Creator', r.owner || 'unknown', false),
+                row('Created Date', r.createdDate && r.createdDate !== 'unknown' ? r.createdDate : 'unknown', false),
+                row('End of Life Date', r.eolDate || 'N/A', false, r.eolDate && r.eolDate !== 'N/A'),
+            ]);
+
             // Network: show for EKS endpoint or any non-N/A IP
             const hasEndpoint = r.publicIp && !['N/A','N/A (Object Storage)','N/A (Infrastructure Stack)','N/A (Serverless)','Private Endpoint'].includes(r.publicIp);
             const network = hasEndpoint
@@ -1730,7 +1736,7 @@
                 ]);
             }
 
-            document.getElementById('rdp-body').innerHTML = identity + network + compute + extra + costSection + metadata;
+            document.getElementById('rdp-body').innerHTML = identity + lifecycle + network + compute + extra + costSection + metadata;
 
             // ── Footer actions ────────────────────────────────────────────────
             const actions = [];
@@ -1981,6 +1987,10 @@
                                         <span class="card-text-clip flex-1 ${isCFN && isCreating ? 'text-amber-400/80' : 'text-slate-400'}">${statusText}</span>
                                     </div>
                                     <p class="text-[10px] text-slate-500 mt-1 card-text-clip">${inst.type}</p>
+                                    <div class="mt-1.5 flex items-center justify-between text-[10px] text-slate-500">
+                                        <div>Owner: <span class="text-slate-400 font-medium">${inst.owner || 'unknown'}</span></div>
+                                        ${inst.eolDate && inst.eolDate !== 'N/A' ? `<div class="text-amber-500/90 font-medium">EOL: ${inst.eolDate}</div>` : ''}
+                                    </div>
                                     ${cfnProgressBar}
                                 </div>`;
                         }).join('');
@@ -2028,7 +2038,7 @@
             }
             
             let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "Resource ID,Resource Name,Service,Type,Public IP/Endpoint,Estimated Cost (Monthly),Last Month Usage,Last Month Cost\n";
+            csvContent += "Resource ID,Resource Name,Service,Type,Public IP/Endpoint,Estimated Cost (Monthly),Last Month Usage,Last Month Cost,Owner,Created Date,EOL Date\n";
             
             resources.forEach(r => {
                 const row = [
@@ -2039,7 +2049,10 @@
                     `"${r.publicIp || 'N/A'}"`,
                     `"$${r.costEstimate || '0.00'}"`,
                     `"${r.lastMonthUsage || 'N/A'}"`,
-                    `"$${r.lastMonthCost || '0.00'}"`
+                    `"$${r.lastMonthCost || '0.00'}"`,
+                    `"${r.owner || 'unknown'}"`,
+                    `"${r.createdDate || 'unknown'}"`,
+                    `"${r.eolDate || 'N/A'}"`
                 ].join(",");
                 csvContent += row + "\n";
             });
@@ -2303,15 +2316,23 @@
                     const idDisplay = r.id.length > 22 ? '…' + r.id.slice(-21) : r.id;
                     doc.text(idDisplay, COLS[2].x, y + 8.5);
 
-                    // Col 3: State text (after dot)
+                    // Col 3: State text (after dot) + EOL
                     doc.setFontSize(7);
                     setColor(state === 'running' ? C.green : C.mutedText);
-                    doc.text(clip(state.toUpperCase(), 8), COLS[3].x + 4, y + 4.5);
+                    doc.text(clip(state.toUpperCase(), 8), COLS[3].x + 4, y + 4);
+                    if (r.eolDate && r.eolDate !== 'N/A') {
+                        doc.setFontSize(6);
+                        setColor([217, 119, 6]);
+                        doc.text(`EOL: ${r.eolDate}`, COLS[3].x + 4, y + 8.5);
+                    }
 
-                    // Col 4: Type (top) 
+                    // Col 4: Type (top) + Owner
                     doc.setFontSize(7);
                     setColor(C.bodyText);
-                    doc.text(clip(r.type || '—', COLS[4].chars), COLS[4].x, y + 4.5);
+                    doc.text(clip(r.type || '—', COLS[4].chars), COLS[4].x, y + 4);
+                    doc.setFontSize(6);
+                    setColor(C.mutedText);
+                    doc.text(clip(`Owner: ${r.owner || 'unknown'}`, 24), COLS[4].x, y + 8.5);
 
                     // Col 5: Est. Cost
                     doc.setFont('helvetica', 'bold');
