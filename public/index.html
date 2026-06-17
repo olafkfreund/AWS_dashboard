@@ -204,10 +204,17 @@
         html:not(.dark) .bg-secondary\/40 {
             background-color: rgba(241, 245, 249, 0.8) !important;
         }
-        html:not(.dark) .bg-slate-800\/40,
-        html:not(.dark) .bg-slate-800\/50,
-        html:not(.dark) .bg-slate-800\/60 {
+        html:not(.dark) .bg-slate-800\/40 {
             background-color: rgba(241, 245, 249, 0.95) !important;
+            border-color: rgba(203, 213, 225, 0.7) !important;
+        }
+        html:not(.dark) .bg-slate-800\/50,
+        html:not(.dark) .bg-slate-800\/60,
+        html:not(.dark) .bg-slate-700\/60,
+        html:not(.dark) .bg-slate-700\/50,
+        html:not(.dark) .bg-slate-700\/40,
+        html:not(.dark) .bg-slate-700\/30 {
+            background-color: rgba(226, 232, 240, 0.8) !important; /* slate-200 */
             border-color: rgba(203, 213, 225, 0.7) !important;
         }
         html:not(.dark) .bg-slate-900\/30 {
@@ -225,13 +232,13 @@
             color: #0f172a !important; /* slate-900 */
         }
         html:not(.dark) .text-slate-300 {
-            color: #334155 !important; /* slate-700 */
+            color: #1e293b !important; /* slate-800 */
         }
         html:not(.dark) .text-slate-400 {
-            color: #475569 !important; /* slate-600 */
+            color: #334155 !important; /* slate-700 */
         }
         html:not(.dark) .text-slate-500 {
-            color: #64748b !important; /* slate-500 */
+            color: #475569 !important; /* slate-600 */
         }
         html:not(.dark) .detail-value {
             color: #1e293b !important; /* slate-800 */
@@ -272,6 +279,7 @@
         }
         html:not(.dark) .bg-emerald-950\/40,
         html:not(.dark) .bg-emerald-900\/40,
+        html:not(.dark) .bg-emerald-900\/50,
         html:not(.dark) .bg-emerald-900\/30 {
             background-color: rgba(209, 250, 229, 0.7) !important; /* emerald-100 */
             color: #047857 !important;
@@ -290,6 +298,7 @@
         }
         html:not(.dark) .bg-blue-950\/40,
         html:not(.dark) .bg-blue-900\/40,
+        html:not(.dark) .bg-blue-900\/50,
         html:not(.dark) .bg-blue-900\/30 {
             background-color: rgba(219, 234, 254, 0.7) !important; /* blue-100 */
             color: #1d4ed8 !important;
@@ -303,8 +312,12 @@
         html:not(.dark) .text-cyan-400 {
             color: #0369a1 !important; /* sky-700 */
         }
+        html:not(.dark) .text-cyan-300 {
+            color: #075985 !important; /* sky-800 */
+        }
         html:not(.dark) .bg-cyan-950\/40,
         html:not(.dark) .bg-cyan-900\/40,
+        html:not(.dark) .bg-cyan-900\/50,
         html:not(.dark) .bg-cyan-900\/30 {
             background-color: rgba(224, 242, 254, 0.7) !important; /* sky-100 */
             color: #0369a1 !important;
@@ -313,6 +326,46 @@
         html:not(.dark) .border-cyan-700\/30,
         html:not(.dark) .border-cyan-800\/40 {
             border-color: rgba(56, 189, 248, 0.5) !important; /* sky-400 */
+        }
+
+        /* Violet overrides in light mode */
+        html:not(.dark) .text-violet-400 {
+            color: #6d28d9 !important; /* violet-700 */
+        }
+        html:not(.dark) .text-violet-300 {
+            color: #5b21b6 !important; /* violet-800 */
+        }
+        html:not(.dark) .bg-violet-950\/40,
+        html:not(.dark) .bg-violet-900\/40,
+        html:not(.dark) .bg-violet-900\/50,
+        html:not(.dark) .bg-violet-900\/30 {
+            background-color: rgba(237, 233, 254, 0.7) !important; /* violet-100 */
+            color: #6d28d9 !important;
+        }
+        html:not(.dark) .border-violet-700\/40,
+        html:not(.dark) .border-violet-700\/30,
+        html:not(.dark) .border-violet-800\/40 {
+            border-color: rgba(167, 139, 250, 0.5) !important; /* violet-400 */
+        }
+
+        /* Amber overrides in light mode */
+        html:not(.dark) .text-amber-400 {
+            color: #b45309 !important; /* amber-700 */
+        }
+        html:not(.dark) .text-amber-300 {
+            color: #92400e !important; /* amber-800 */
+        }
+        html:not(.dark) .bg-amber-950\/40,
+        html:not(.dark) .bg-amber-900\/40,
+        html:not(.dark) .bg-amber-900\/50,
+        html:not(.dark) .bg-amber-900\/30 {
+            background-color: rgba(254, 243, 199, 0.7) !important; /* amber-100 */
+            color: #b45309 !important;
+        }
+        html:not(.dark) .border-amber-700\/40,
+        html:not(.dark) .border-amber-700\/30,
+        html:not(.dark) .border-amber-800\/40 {
+            border-color: rgba(245, 158, 11, 0.5) !important; /* amber-400 */
         }
 
         /* Shared assistant styles loaded dynamically from shared-assistant.js */
