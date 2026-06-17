@@ -5,6 +5,7 @@
   packages = with pkgs; [
     git
     awscli2
+    just
   ];
 
   # Language configuration for Node.js
@@ -34,7 +35,7 @@
   # Welcome greeting when entering the shell
   enterShell = ''
     echo "============================================="
-    echo "⚡ AWS Status Dashboard Dev Environment ⚡"
+    echo "AWS Status Dashboard Dev Environment"
     echo "============================================="
     echo "Available commands:"
     echo "  - start-backend: Run the Node.js backend proxy"

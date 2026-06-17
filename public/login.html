@@ -110,10 +110,10 @@
             <div>
                 <button id="aws-login-btn" onclick="loginWithAwsSso()" class="w-full bg-[#1e293b] hover:bg-[#334155] neon-glow text-white font-medium py-3 px-4 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-3 border border-slate-700/50">
                     <i class="fa-solid fa-key text-primary"></i>
-                    <span>Login with AWS SSO</span>
+                    <span>Verify Active AWS SSO Session</span>
                 </button>
                 <p class="text-[11px] text-slate-500 text-center mt-1.5">
-                    Direct browser login to AWS IAM Identity Center (no CLI or keys needed).
+                    Validates your local active <code class="text-primary/90 font-mono">Synechron</code> CLI credentials.
                 </p>
             </div>
 
@@ -178,6 +178,8 @@
             const message = document.getElementById('error-message');
             message.innerHTML = msg;
             alert.classList.remove('hidden');
+            alert.classList.remove('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
+            alert.classList.add('bg-red-900/40', 'border-red-500/50', 'text-red-200');
         }
 
 
@@ -191,80 +193,62 @@
             window.location.href = '/api/auth/gitlab';
         }
 
-        let ssoPollTimeout = null;
+        async function triggerAwsSsoLogin() {
+            const alert = document.getElementById('error-alert');
+            const message = document.getElementById('error-message');
+            message.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary mr-2"></i> Launching AWS SSO browser login...`;
+            alert.classList.remove('hidden');
+            alert.classList.remove('bg-red-900/40', 'border-red-500/50', 'text-red-200');
+            alert.classList.add('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
+            
+            try {
+                const response = await fetch('/api/auth/sso-refresh', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    message.innerHTML = `<i class="fa-solid fa-circle-check text-green-500 mr-2"></i> AWS SSO login launched! Complete authentication in your browser window, then click <strong>Verify Active AWS SSO Session</strong> above.`;
+                } else {
+                    showError("Failed to launch SSO login: " + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                showError("Failed to connect to proxy server.");
+            }
+        }
 
         async function loginWithAwsSso() {
-            if (ssoPollTimeout) clearTimeout(ssoPollTimeout);
-            
             const btn = document.getElementById('aws-login-btn');
             const originalContent = btn.innerHTML;
             
             btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary"></i> <span>Initializing SSO Auth...</span>`;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-primary"></i> <span>Verifying credentials...</span>`;
             
             try {
-                const response = await fetch('/api/auth/sso', { method: 'POST' });
+                const response = await fetch('/api/auth/aws-sso-verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
-                    btn.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square text-primary"></i> <span>Confirm in browser...</span>`;
-                    
-                    // Show authentication instructions with User Code
+                    btn.innerHTML = `<i class="fa-solid fa-circle-check text-green-500"></i> <span>Success! Redirecting...</span>`;
+                    btn.classList.remove('bg-[#1e293b]', 'hover:bg-[#334155]');
+                    btn.classList.add('bg-green-950/40', 'border-green-500/50');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 800);
+                } else {
+                    const errorMsg = data.error || "AWS SSO verification failed.";
                     const alert = document.getElementById('error-alert');
                     const message = document.getElementById('error-message');
+                    message.innerHTML = `${errorMsg} <a href="#" onclick="triggerAwsSsoLogin(); return false;" class="underline font-bold text-primary hover:text-primary/80">Click here to authenticate in browser</a>`;
                     alert.classList.remove('hidden');
-                    alert.classList.remove('bg-red-900/40', 'border-red-500/50', 'text-red-200');
-                    alert.classList.add('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
-                    message.innerHTML = `Please complete authentication in your AWS SSO browser tab.<br>Your verification code is: <strong class="text-white text-base font-mono bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700">${data.userCode}</strong>`;
-                    
-                    // Open the AWS SSO verification URI in a new tab
-                    window.open(data.verificationUriComplete, '_blank');
-                    
-                    // Start recursive polling for token
-                    async function poll() {
-                        try {
-                            const pollRes = await fetch('/api/auth/sso/poll', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ deviceCode: data.deviceCode })
-                            });
-                            const pollData = await pollRes.json();
-                            
-                            if (pollRes.ok && pollData.success) {
-                                if (pollData.status === 'approved') {
-                                    btn.innerHTML = `<i class="fa-solid fa-circle-check text-green-500"></i> <span>Success! Redirecting...</span>`;
-                                    btn.classList.remove('bg-[#1e293b]', 'hover:bg-[#334155]');
-                                    btn.classList.add('bg-green-950/40', 'border-green-500/50');
-                                    
-                                    // Reset instructions card
-                                    alert.classList.add('hidden');
-                                    
-                                    setTimeout(() => {
-                                        window.location.href = '/';
-                                    }, 800);
-                                    return; // Stop polling
-                                } else if (pollData.status === 'error') {
-                                    showError("AWS SSO authorization error: " + pollData.error);
-                                    btn.disabled = false;
-                                    btn.innerHTML = originalContent;
-                                    return; // Stop polling
-                                }
-                            }
-                        } catch (pollErr) {
-                            console.error("SSO poll error:", pollErr);
-                        }
-                        
-                        ssoPollTimeout = setTimeout(poll, 5000);
-                    }
-                    
-                    ssoPollTimeout = setTimeout(poll, 5000);
-                } else {
-                    showError("Failed to initialize AWS SSO session: " + (data.error || "Unknown error"));
+                    alert.classList.remove('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
+                    alert.classList.add('bg-red-900/40', 'border-red-500/50', 'text-red-200');
                     btn.disabled = false;
                     btn.innerHTML = originalContent;
                 }
             } catch (error) {
-                showError("A connection error occurred while starting AWS SSO authentication.");
+                showError("A connection error occurred while communicating with the proxy backend.");
                 btn.disabled = false;
                 btn.innerHTML = originalContent;
             }

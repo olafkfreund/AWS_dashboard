@@ -106,6 +106,59 @@
         .msg-bot strong {
             font-weight: bold; color: white;
         }
+
+        /* Light mode overrides for Assistant */
+        html:not(.dark) .copilot-chat-popup {
+            background: #ffffff !important;
+            border-color: rgba(148,163,184,0.15) !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .copilot-chat-header {
+            background: #f8fafc !important;
+            border-bottom-color: rgba(148,163,184,0.15) !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .copilot-chat-settings-bar {
+            background: #f1f5f9 !important;
+            border-bottom-color: rgba(148,163,184,0.15) !important;
+        }
+        html:not(.dark) .copilot-chat-provider-select {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }
+        html:not(.dark) .copilot-chat-body {
+            background: rgba(241, 245, 249, 0.5) !important;
+        }
+        html:not(.dark) .copilot-chat-input-area {
+            background: #f8fafc !important;
+            border-top-color: rgba(148,163,184,0.15) !important;
+        }
+        html:not(.dark) .copilot-chat-input {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }
+        html:not(.dark) .msg-bot {
+            background: #f1f5f9 !important;
+            color: #1e293b !important;
+        }
+        html:not(.dark) .msg-user {
+            background: #FF9900 !important;
+            color: #000000 !important;
+        }
+        html:not(.dark) .msg-bot pre {
+            background: #f8fafc !important;
+            color: #0284c7 !important;
+        }
+        html:not(.dark) .msg-bot code {
+            background: #f8fafc !important;
+            color: #db2777 !important;
+        }
+        html:not(.dark) .msg-bot strong {
+            color: #0f172a !important;
+        }
     `;
 
     // --- 2. TELEMETRY STATE & RECOVERY SYSTEM ---

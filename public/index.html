@@ -190,6 +190,69 @@
             display: inline-block;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Light Mode Overrides for Hardcoded Dark Classes */
+        html:not(.dark) body {
+            background: radial-gradient(circle at center, #f8fafc 0%, #e2e8f0 100%) !important;
+        }
+        html:not(.dark) .glass-panel {
+            background: rgba(255, 255, 255, 0.75) !important;
+            backdrop-filter: blur(20px);
+            border-color: rgba(148, 163, 184, 0.2) !important;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.02) !important;
+        }
+        html:not(.dark) .bg-secondary\/40 {
+            background-color: rgba(241, 245, 249, 0.8) !important;
+        }
+        html:not(.dark) .bg-slate-800\/40,
+        html:not(.dark) .bg-slate-800\/50,
+        html:not(.dark) .bg-slate-800\/60 {
+            background-color: rgba(241, 245, 249, 0.95) !important;
+            border-color: rgba(203, 213, 225, 0.7) !important;
+        }
+        html:not(.dark) .bg-slate-900\/30 {
+            background-color: rgba(241, 245, 249, 0.45) !important;
+        }
+        html:not(.dark) .bg-slate-900 {
+            background-color: #f8fafc !important;
+        }
+        html:not(.dark) .border-slate-700\/40,
+        html:not(.dark) .border-slate-700\/60,
+        html:not(.dark) .border-slate-600\/40 {
+            border-color: rgba(203, 213, 225, 0.6) !important;
+        }
+        html:not(.dark) .text-white {
+            color: #0f172a !important; /* slate-900 */
+        }
+        html:not(.dark) .text-slate-300 {
+            color: #334155 !important; /* slate-700 */
+        }
+        html:not(.dark) .text-slate-400 {
+            color: #475569 !important; /* slate-600 */
+        }
+        html:not(.dark) .text-slate-500 {
+            color: #64748b !important; /* slate-500 */
+        }
+        html:not(.dark) .detail-value {
+            color: #1e293b !important; /* slate-800 */
+        }
+        html:not(.dark) .card-hover:hover {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.04) !important;
+            border-color: hsl(var(--primary) / 0.6) !important;
+        }
+        html:not(.dark) #resource-detail-panel {
+            background-color: #ffffff !important;
+            border-left-color: rgba(203, 213, 225, 0.8) !important;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.05) !important;
+        }
+        html:not(.dark) #resource-detail-panel .border-slate-700\/60,
+        html:not(.dark) #resource-detail-panel .border-slate-700\/40 {
+            border-color: rgba(203, 213, 225, 0.8) !important;
+        }
+        html:not(.dark) #rdp-cost-banner {
+            background-color: rgba(241, 245, 249, 0.85) !important;
+        }
+
         /* Shared assistant styles loaded dynamically from shared-assistant.js */
     </style>
     <!-- FontAwesome for Assistant Icon -->
