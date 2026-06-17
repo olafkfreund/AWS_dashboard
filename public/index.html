@@ -741,6 +741,39 @@
         }
 
         // ── AWS Token Expiry Banner ──────────────────────────────────────────────
+        function showCostTokenExpired(data) {
+            const cmd = data?.loginCommand || 'aws sso login --profile Synechron';
+            const url = data?.ssoStartUrl  || 'https://view.awsapps.com/start';
+            // Set MTD tile to show expired state
+            const amountEl = document.getElementById('cost-amount');
+            if (amountEl) amountEl.innerText = '—';
+            const badge = document.getElementById('cost-badge');
+            if (badge) { badge.classList.remove('hidden'); badge.innerText = 'Credentials Expired'; badge.className = badge.className.replace('bg-primary/20 text-primary', 'bg-red-900/40 text-red-400'); }
+            // Per-service breakdown area shows renewal instructions
+            const breakdown = document.getElementById('cost-service-breakdown');
+            if (breakdown) breakdown.innerHTML = `
+                <div class="flex items-start gap-3 p-3 rounded-lg bg-red-950/20 border border-red-800/30">
+                    <i class="fa-solid fa-key text-red-400 mt-0.5 shrink-0"></i>
+                    <div class="text-[11px] text-slate-300">
+                        <p class="font-semibold text-red-300 mb-1">AWS credentials expired — cost data unavailable</p>
+                        <p class="text-slate-400 mb-2">Run this in your terminal, then click Refresh:</p>
+                        <div class="flex items-center gap-2 bg-slate-900 rounded px-3 py-1.5 font-mono text-xs text-red-300">
+                            <span class="flex-1">${cmd}</span>
+                            <button onclick="navigator.clipboard.writeText('${cmd}').then(()=>this.innerHTML='✓')"
+                                class="text-slate-500 hover:text-white transition-colors" title="Copy">
+                                <i class="fa-solid fa-copy text-[10px]"></i>
+                            </button>
+                        </div>
+                        <div class="flex gap-2 mt-2">
+                            <a href="${url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline text-[10px]">Open SSO Portal →</a>
+                            <span class="text-slate-600">·</span>
+                            <button onclick="fetchSpending()" class="text-slate-400 hover:text-white text-[10px]">Retry after refresh</button>
+                        </div>
+                    </div>
+                </div>`;
+            showTokenWarningBar('expired', cmd, url);
+        }
+
         function showAwsTokenExpiredBanner(data) {
             const cmd = data?.loginCommand || `aws sso login --profile Synechron`;
             const url = data?.ssoStartUrl || 'https://view.awsapps.com/start';
@@ -831,22 +864,34 @@
             try {
                 const res = await fetch('/api/spending');
                 if (res.status === 401) {
+                    let body = {};
+                    try { body = await res.json(); } catch {}
+                    if (body.tokenExpired) {
+                        showCostTokenExpired(body);
+                    }
                     if (icon) icon.classList.remove('animate-spin');
                     return;
                 }
                 const data = await res.json();
 
+                if (!data.success && data.tokenExpired) {
+                    showCostTokenExpired(data);
+                    if (icon) icon.classList.remove('animate-spin');
+                    return;
+                }
+
                 if (data.success) {
                     // ── MTD Actual from Cost Explorer ─────────────────────────
                     const cost = data.cost;
                     const amountEl = document.getElementById('cost-amount');
-                    if (amountEl) amountEl.innerText = cost.amount;
+                    if (amountEl) amountEl.innerText = cost ? cost.amount : '—';
                     const currencyEl = document.getElementById('cost-currency');
-                    if (currencyEl) currencyEl.innerText = cost.currency;
+                    if (currencyEl) currencyEl.innerText = cost ? cost.currency : 'USD';
 
                     const costBadge = document.getElementById('cost-badge');
                     if (costBadge) {
-                        if (cost.isMock) { costBadge.classList.remove('hidden'); costBadge.innerText = 'Demo Cost Data'; }
+                        if (!cost) { costBadge.classList.remove('hidden'); costBadge.innerText = 'Unavailable'; }
+                        else if (cost.isMock) { costBadge.classList.remove('hidden'); costBadge.innerText = 'Demo Data'; }
                         else costBadge.classList.add('hidden');
                     }
 

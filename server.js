@@ -1852,35 +1852,42 @@ const getCostDates = () => {
 
 // Endpoint to get AWS spending & budget details
 app.get('/api/spending', async (req, res) => {
-    let costData = { amount: "128.50", currency: "USD", isMock: true };
-    let budgetData = { limit: "200.00", spent: "128.50", currency: "USD", isMock: true, name: "Monthly AWS Budget" };
+    let costData = null;
+    let budgetData = null;
+    let tokenExpired = false;
     let errorLog = [];
 
     const dynamicClients = getAwsClients(req);
     const { costexplorer, budgets } = dynamicClients;
 
-    // 1. Fetch Cost explorer data
+    // 1. Fetch Cost Explorer data
     try {
         const { start, end } = getCostDates();
-        const ceCommand = new GetCostAndUsageCommand({
+        const ceResponse = await costexplorer.send(new GetCostAndUsageCommand({
             TimePeriod: { Start: start, End: end },
             Granularity: 'MONTHLY',
             Metrics: ['UnblendedCost']
-        });
-        const ceResponse = await costexplorer.send(ceCommand);
-        if (ceResponse.ResultsByTime && ceResponse.ResultsByTime.length > 0) {
+        }));
+        if (ceResponse.ResultsByTime?.length > 0) {
             const amount = ceResponse.ResultsByTime[0].Total?.UnblendedCost?.Amount;
-            const unit = ceResponse.ResultsByTime[0].Total?.UnblendedCost?.Unit;
+            const unit   = ceResponse.ResultsByTime[0].Total?.UnblendedCost?.Unit;
             if (amount !== undefined) {
-                costData = {
-                    amount: parseFloat(amount).toFixed(2),
-                    currency: unit || 'USD',
-                    isMock: false
-                };
+                costData = { amount: parseFloat(amount).toFixed(2), currency: unit || 'USD', isMock: false };
             }
         }
     } catch (err) {
-        console.error("Cost Explorer query failed (using mock data):", err.message);
+        if (isTokenExpiredError(err)) {
+            awsCredentialsExpired = true;
+            return res.status(401).json({
+                success: false,
+                tokenExpired: true,
+                profile: awsProfile,
+                error: 'AWS credentials have expired.',
+                loginCommand: `aws sso login --profile ${awsProfile}`,
+                ssoStartUrl: 'https://view.awsapps.com/start'
+            });
+        }
+        console.error('Cost Explorer query failed:', err.message);
         errorLog.push(`CE: ${err.message}`);
     }
 
@@ -1889,33 +1896,37 @@ app.get('/api/spending', async (req, res) => {
         const config = getSSOConfig();
         const accountId = config.accountId || process.env.AWS_ACCOUNT_ID;
         if (accountId) {
-            const budgetCommand = new DescribeBudgetsCommand({ AccountId: accountId });
-            const bgResponse = await budgets.send(budgetCommand);
-            if (bgResponse.Budgets && bgResponse.Budgets.length > 0) {
-                const primaryBudget = bgResponse.Budgets[0];
+            const bgResponse = await budgets.send(new DescribeBudgetsCommand({ AccountId: accountId }));
+            if (bgResponse.Budgets?.length > 0) {
+                const b = bgResponse.Budgets[0];
                 budgetData = {
-                    name: primaryBudget.BudgetName,
-                    limit: parseFloat(primaryBudget.BudgetLimit?.Amount || 0).toFixed(2),
-                    spent: parseFloat(primaryBudget.CalculatedSpend?.ActualSpend?.Amount || 0).toFixed(2),
-                    currency: primaryBudget.BudgetLimit?.Unit || 'USD',
-                    isMock: false
+                    name:     b.BudgetName,
+                    limit:    parseFloat(b.BudgetLimit?.Amount || 0).toFixed(2),
+                    spent:    parseFloat(b.CalculatedSpend?.ActualSpend?.Amount || 0).toFixed(2),
+                    currency: b.BudgetLimit?.Unit || 'USD',
+                    isMock:   false
                 };
-            } else {
-                budgetData = null; // No budget configured in AWS
             }
+            // else: no budgets configured — budgetData stays null (that's correct)
         } else {
-            errorLog.push("Budgets: Missing accountId for query");
+            errorLog.push('Budgets: Missing accountId for query');
         }
     } catch (err) {
-        console.error("Budgets query failed (using mock data):", err.message);
-        errorLog.push(`Budgets: ${err.message}`);
+        if (isTokenExpiredError(err)) {
+            awsCredentialsExpired = true;
+            // Cost Explorer already succeeded — just skip budgets
+            errorLog.push('Budgets: token expired, skipped');
+        } else {
+            console.error('Budgets query failed:', err.message);
+            errorLog.push(`Budgets: ${err.message}`);
+        }
     }
 
     res.json({
         success: true,
-        cost: costData,
-        budget: budgetData,
-        errors: errorLog.length > 0 ? errorLog : null
+        cost:    costData,   // null if CE failed for non-auth reason
+        budget:  budgetData, // null if no budgets or fetch failed
+        errors:  errorLog.length > 0 ? errorLog : null
     });
 });
 
