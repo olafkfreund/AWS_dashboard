@@ -94,5 +94,10 @@ The backend is initialized using the `fromIni` credential provider rather than h
 ### 2. File-Backed Session Store
 To ensure developer sessions survive application restarts (e.g. when changing configuration files), sessions are serialized to `.sessions.json`. Sessions older than 12 hours are purged dynamically on load and save, ensuring data hygiene and security.
 
-### 3. Decoupled Demo Mode
+### 3. AWS Secrets Manager Integration
+To avoid storing sensitive access tokens and client credentials in plaintext configuration files on the local filesystem (such as `.envrc`), the platform supports vaulting configurations inside AWS Secrets Manager.
+- **Save to Secrets Manager**: The backend serializes the configured Git credentials as a JSON payload, writes them to the specified secret in Secrets Manager, updates the local `.envrc` with only the `AWS_SECRET_NAME`, and strips the actual plaintext secrets.
+- **Load and Autoload**: On startup or manual trigger, the backend queries AWS Secrets Manager using the configured `AWS_SECRET_NAME` to retrieve the JSON payload and apply the configuration variables directly in-memory, keeping disk storage clean.
+
+### 4. Decoupled Demo Mode
 For testing environments (e.g. deployment to static GitHub Pages), the client-side JavaScript intercepts `window.fetch`. When local hosting is detected, it returns structured mock JSON matching the format of the backend API, allowing full functionality of the dashboard's layout and components without an active AWS connection.

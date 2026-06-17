@@ -569,6 +569,32 @@
 
             <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
                 <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
+                    <i class="fa-solid fa-vault mr-3 text-primary"></i> AWS Secrets Vault Integration
+                </h2>
+                <p class="text-xs text-muted-foreground mb-6">Store and retrieve your GitHub & GitLab tokens securely in AWS Secrets Manager.</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">AWS Secrets Manager Secret Name</label>
+                        <input type="text" id="settings-aws-secret-name" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="e.g. synechron/dev/tokens">
+                    </div>
+                    
+                    <div class="pt-4 flex items-center gap-4">
+                        <button onclick="saveToVault()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-md shadow-sm transition-colors">
+                            Save to AWS Secrets Manager
+                        </button>
+                        <button onclick="loadFromVault()" class="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium py-2 px-6 rounded-md border border-border shadow-sm transition-colors">
+                            Load from AWS Secrets Manager
+                        </button>
+                    </div>
+                    <div>
+                        <p id="vault-msg" class="text-sm hidden"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
+                <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
                     <i class="fa-solid fa-sliders mr-3 text-primary"></i> Interface Options
                 </h2>
                 
@@ -1082,6 +1108,7 @@
                 document.getElementById('settings-github-client-secret').value = data.github_client_secret || '';
                 document.getElementById('settings-gitlab-client-id').value = data.gitlab_client_id || '';
                 document.getElementById('settings-gitlab-client-secret').value = data.gitlab_client_secret || '';
+                document.getElementById('settings-aws-secret-name').value = data.aws_secret_name || '';
             } catch (e) {
                 console.error("Failed to load settings", e);
             }
@@ -1150,6 +1177,87 @@
                 msg.classList.add('text-red-500');
             }
             setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
+        async function saveToVault() {
+            const secretName = document.getElementById('settings-aws-secret-name').value;
+            const github = document.getElementById('settings-github-pat').value;
+            const gitlab = document.getElementById('settings-gitlab-pat').value;
+            const instance_url = document.getElementById('settings-gitlab-url').value;
+            const github_client_id = document.getElementById('settings-github-client-id').value;
+            const github_client_secret = document.getElementById('settings-github-client-secret').value;
+            const gitlab_client_id = document.getElementById('settings-gitlab-client-id').value;
+            const gitlab_client_secret = document.getElementById('settings-gitlab-client-secret').value;
+            const msg = document.getElementById('vault-msg');
+            
+            if (!secretName) {
+                msg.textContent = "Please enter an AWS Secrets Manager Secret Name.";
+                msg.className = "text-sm text-red-500 block mt-2";
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/config/vault/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        secretName,
+                        github, 
+                        gitlab, 
+                        instance_url, 
+                        github_client_id, 
+                        github_client_secret, 
+                        gitlab_client_id, 
+                        gitlab_client_secret 
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    msg.textContent = "Tokens securely saved to AWS Secrets Manager! AWS_SECRET_NAME persisted in .envrc.";
+                    msg.className = "text-sm text-green-500 block mt-2";
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (e) {
+                msg.textContent = "Error saving to AWS Secrets Manager: " + e.message;
+                msg.className = "text-sm text-red-500 block mt-2";
+            }
+            setTimeout(() => msg.classList.add('hidden'), 5000);
+        }
+
+        async function loadFromVault() {
+            const secretName = document.getElementById('settings-aws-secret-name').value;
+            const msg = document.getElementById('vault-msg');
+            
+            try {
+                const res = await fetch('/api/config/vault/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secretName })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    msg.textContent = "Tokens successfully loaded from AWS Secrets Manager!";
+                    msg.className = "text-sm text-green-500 block mt-2";
+                    
+                    // Populate the UI inputs
+                    document.getElementById('settings-aws-secret-name').value = data.data.secretName || '';
+                    document.getElementById('settings-github-pat').value = data.data.github || '';
+                    document.getElementById('settings-gitlab-pat').value = data.data.gitlab || '';
+                    document.getElementById('settings-gitlab-url').value = data.data.instance_url || 'https://gitlab.com';
+                    document.getElementById('settings-github-client-id').value = data.data.github_client_id || '';
+                    document.getElementById('settings-github-client-secret').value = data.data.github_client_secret || '';
+                    document.getElementById('settings-gitlab-client-id').value = data.data.gitlab_client_id || '';
+                    document.getElementById('settings-gitlab-client-secret').value = data.data.gitlab_client_secret || '';
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (e) {
+                msg.textContent = "Error loading from AWS Secrets Manager: " + e.message;
+                msg.className = "text-sm text-red-500 block mt-2";
+            }
+            setTimeout(() => msg.classList.add('hidden'), 5000);
         }
 
         // Format dates

@@ -100,3 +100,12 @@ Ensure you have the following installed on your host system:
   aws sts get-caller-identity --profile Synechron
   aws eks list-clusters --profile Synechron --region eu-west-2
   ```
+
+### 5. Storing and Loading Tokens from AWS Secrets Manager
+To store credentials securely instead of keeping them in plaintext in your local `.envrc`:
+1. Navigate to the **Settings** tab.
+2. In the **AWS Secrets Vault Integration** panel, specify a secret name (e.g., `synechron/dev/tokens`).
+3. Fill in your Personal Access Tokens and OAuth App details in the inputs above.
+4. Click **Save to AWS Secrets Manager**. The backend will store the tokens securely in AWS Secrets Manager and write `export AWS_SECRET_NAME="your-secret-name"` to your local `.envrc`, while removing plaintext tokens from disk.
+5. On subsequent server starts, the backend will automatically query AWS Secrets Manager to load the tokens into memory.
+6. To manually reload tokens or populate the settings form from an existing secret, enter the secret name and click **Load from AWS Secrets Manager**.

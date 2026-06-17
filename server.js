@@ -29,7 +29,7 @@ const { DynamoDBClient, ListTablesCommand } = require('@aws-sdk/client-dynamodb'
 const { ECRClient, DescribeRepositoriesCommand } = require('@aws-sdk/client-ecr');
 const { SNSClient, ListTopicsCommand } = require('@aws-sdk/client-sns');
 const { SQSClient, ListQueuesCommand, GetQueueAttributesCommand } = require('@aws-sdk/client-sqs');
-const { SecretsManagerClient, ListSecretsCommand } = require('@aws-sdk/client-secrets-manager');
+const { SecretsManagerClient, ListSecretsCommand, GetSecretValueCommand, CreateSecretCommand, UpdateSecretCommand } = require('@aws-sdk/client-secrets-manager');
 const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeTargetGroupsCommand } = require('@aws-sdk/client-elastic-load-balancing-v2');
 const { AutoScalingClient, DescribeAutoScalingGroupsCommand } = require('@aws-sdk/client-auto-scaling');
 const { CloudWatchClient, DescribeAlarmsCommand } = require('@aws-sdk/client-cloudwatch');
@@ -691,6 +691,7 @@ app.get('/api/config/tokens', (req, res) => {
             let gh_client_secret = null;
             let gl_client_id = null;
             let gl_client_secret = null;
+            let aws_secret_name = null;
 
             content.split('\n').forEach(line => {
                 const cleanValue = (val) => val ? val.trim().replace(/['"\r\n]/g, '') : null;
@@ -704,6 +705,7 @@ app.get('/api/config/tokens', (req, res) => {
                 if (line.startsWith('export GITHUB_OAUTH_CLIENT_SECRET=')) gh_client_secret = cleanValue(line.split('=')[1]);
                 if (line.startsWith('export GITLAB_OAUTH_CLIENT_ID=')) gl_client_id = cleanValue(line.split('=')[1]);
                 if (line.startsWith('export GITLAB_OAUTH_CLIENT_SECRET=')) gl_client_secret = cleanValue(line.split('=')[1]);
+                if (line.startsWith('export AWS_SECRET_NAME=')) aws_secret_name = cleanValue(line.split('=')[1]);
             });
 
             tokens.github = synechron_github_token || github_token || github_pat;
@@ -713,6 +715,7 @@ app.get('/api/config/tokens', (req, res) => {
             tokens.github_client_secret = gh_client_secret;
             tokens.gitlab_client_id = gl_client_id;
             tokens.gitlab_client_secret = gl_client_secret;
+            tokens.aws_secret_name = aws_secret_name;
         }
         // Fallback to process.env (also sanitize just in case)
         const sanitizeEnv = (val) => val ? val.replace(/[\r\n]/g, '').trim() : null;
@@ -722,6 +725,7 @@ app.get('/api/config/tokens', (req, res) => {
         if (!tokens.github_client_secret) tokens.github_client_secret = sanitizeEnv(process.env.GITHUB_OAUTH_CLIENT_SECRET);
         if (!tokens.gitlab_client_id) tokens.gitlab_client_id = sanitizeEnv(process.env.GITLAB_OAUTH_CLIENT_ID);
         if (!tokens.gitlab_client_secret) tokens.gitlab_client_secret = sanitizeEnv(process.env.GITLAB_OAUTH_CLIENT_SECRET);
+        if (!tokens.aws_secret_name) tokens.aws_secret_name = sanitizeEnv(process.env.AWS_SECRET_NAME);
     } catch (e) {
         console.error('Error reading envrc for tokens:', e);
     }
@@ -793,6 +797,207 @@ app.post('/api/config/tokens', (req, res) => {
     } catch (e) {
         console.error('Error writing envrc:', e);
         res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Endpoint to save tokens to AWS Secrets Manager Vault
+app.post('/api/config/vault/save', async (req, res) => {
+    try {
+        const {
+            secretName,
+            github,
+            gitlab,
+            instance_url,
+            github_client_id,
+            github_client_secret,
+            gitlab_client_id,
+            gitlab_client_secret
+        } = req.body;
+
+        if (!secretName) {
+            return res.status(400).json({ success: false, error: 'Secret Name is required.' });
+        }
+
+        const payload = {
+            github: github || '',
+            gitlab: gitlab || '',
+            instance_url: instance_url || '',
+            github_client_id: github_client_id || '',
+            github_client_secret: github_client_secret || '',
+            gitlab_client_id: gitlab_client_id || '',
+            gitlab_client_secret: gitlab_client_secret || ''
+        };
+
+        const secretString = JSON.stringify(payload);
+
+        // Get dynamic or global client
+        const { secrets } = getAwsClients(req);
+
+        try {
+            await secrets.send(new CreateSecretCommand({
+                Name: secretName,
+                SecretString: secretString,
+                Description: 'Tokens for GitHub and GitLab stored by Calitti AWS Dashboard'
+            }));
+        } catch (err) {
+            if (err.name === 'ResourceExistsException' || err.code === 'ResourceExistsException') {
+                await secrets.send(new UpdateSecretCommand({
+                    SecretId: secretName,
+                    SecretString: secretString
+                }));
+            } else {
+                throw err;
+            }
+        }
+
+        // Write AWS_SECRET_NAME to .envrc and clear actual tokens from there
+        const envrcPath = path.join(__dirname, '..', 'Synechron_ARC', 'sarc', '.envrc');
+        let lines = [];
+        if (fs.existsSync(envrcPath)) {
+            lines = fs.readFileSync(envrcPath, 'utf8').split('\n');
+        }
+
+        lines = lines.filter(line => 
+            !line.startsWith('export AWS_SECRET_NAME=') &&
+            !line.startsWith('export GITLAB_TOKEN=') && 
+            !line.startsWith('export GITLAB_PAT=') && 
+            !line.startsWith('export GITHUB_TOKEN=') && 
+            !line.startsWith('export GITHUB_PAT=') && 
+            !line.startsWith('export SYNECHRON_GITHUB_TOKEN=') &&
+            !line.startsWith('export GITLAB_URL=') &&
+            !line.startsWith('export GITHUB_OAUTH_CLIENT_ID=') &&
+            !line.startsWith('export GITHUB_OAUTH_CLIENT_SECRET=') &&
+            !line.startsWith('export GITLAB_OAUTH_CLIENT_ID=') &&
+            !line.startsWith('export GITLAB_OAUTH_CLIENT_SECRET=')
+        );
+
+        lines.push(`export AWS_SECRET_NAME="${secretName}"`);
+        fs.writeFileSync(envrcPath, lines.join('\n').trim() + '\n');
+
+        // Dynamically apply changes in-memory
+        process.env.AWS_SECRET_NAME = secretName;
+        process.env.SYNECHRON_GITHUB_TOKEN = github || '';
+        process.env.GITLAB_PAT = gitlab || '';
+        if (instance_url) {
+            process.env.GITLAB_URL = instance_url;
+            try {
+                const url = new URL(instance_url);
+                gitlabHost = url.hostname;
+            } catch(e) {}
+        } else {
+            process.env.GITLAB_URL = '';
+            gitlabHost = 'gitlab.com';
+        }
+        
+        process.env.GITHUB_OAUTH_CLIENT_ID = github_client_id || '';
+        githubClientId = github_client_id || null;
+        process.env.GITHUB_OAUTH_CLIENT_SECRET = github_client_secret || '';
+        githubClientSecret = github_client_secret || null;
+        
+        process.env.GITLAB_OAUTH_CLIENT_ID = gitlab_client_id || '';
+        gitlabClientId = gitlab_client_id || null;
+        process.env.GITLAB_OAUTH_CLIENT_SECRET = gitlab_client_secret || '';
+        gitlabClientSecret = gitlab_client_secret || null;
+
+        res.json({ success: true, message: 'Settings saved to AWS Secrets Manager and AWS_SECRET_NAME persisted in .envrc' });
+    } catch (err) {
+        console.error('Error saving to AWS Secrets Manager:', err);
+        if (isTokenExpiredError(err)) {
+            awsCredentialsExpired = true;
+            return res.status(401).json({
+                success: false,
+                tokenExpired: true,
+                profile: awsProfile,
+                error: 'AWS credentials have expired. Please login again.',
+                loginCommand: `aws sso login --profile ${awsProfile}`
+            });
+        }
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Endpoint to load tokens from AWS Secrets Manager Vault
+app.post('/api/config/vault/load', async (req, res) => {
+    try {
+        const secretName = req.body.secretName || process.env.AWS_SECRET_NAME;
+        if (!secretName) {
+            return res.status(400).json({ success: false, error: 'No secret name specified and AWS_SECRET_NAME is not set.' });
+        }
+
+        const { secrets } = getAwsClients(req);
+        const secretRes = await secrets.send(new GetSecretValueCommand({ SecretId: secretName }));
+        if (!secretRes.SecretString) {
+            return res.status(404).json({ success: false, error: 'Secret is empty.' });
+        }
+
+        const data = JSON.parse(secretRes.SecretString);
+
+        // Apply in-memory
+        process.env.AWS_SECRET_NAME = secretName;
+        if (data.github !== undefined) process.env.SYNECHRON_GITHUB_TOKEN = data.github;
+        if (data.gitlab !== undefined) process.env.GITLAB_PAT = data.gitlab;
+        if (data.instance_url !== undefined) {
+            process.env.GITLAB_URL = data.instance_url;
+            try {
+                const url = new URL(data.instance_url);
+                gitlabHost = url.hostname;
+            } catch(e) {}
+        }
+        if (data.github_client_id !== undefined) {
+            process.env.GITHUB_OAUTH_CLIENT_ID = data.github_client_id;
+            githubClientId = data.github_client_id;
+        }
+        if (data.github_client_secret !== undefined) {
+            process.env.GITHUB_OAUTH_CLIENT_SECRET = data.github_client_secret;
+            githubClientSecret = data.github_client_secret;
+        }
+        if (data.gitlab_client_id !== undefined) {
+            process.env.GITLAB_OAUTH_CLIENT_ID = data.gitlab_client_id;
+            gitlabClientId = data.gitlab_client_id;
+        }
+        if (data.gitlab_client_secret !== undefined) {
+            process.env.GITLAB_OAUTH_CLIENT_SECRET = data.gitlab_client_secret;
+            gitlabClientSecret = data.gitlab_client_secret;
+        }
+
+        // Persist the AWS_SECRET_NAME in .envrc
+        const envrcPath = path.join(__dirname, '..', 'Synechron_ARC', 'sarc', '.envrc');
+        let lines = [];
+        if (fs.existsSync(envrcPath)) {
+            lines = fs.readFileSync(envrcPath, 'utf8').split('\n');
+        }
+
+        lines = lines.filter(line => !line.startsWith('export AWS_SECRET_NAME='));
+        lines.push(`export AWS_SECRET_NAME="${secretName}"`);
+        fs.writeFileSync(envrcPath, lines.join('\n').trim() + '\n');
+
+        res.json({
+            success: true,
+            message: 'Tokens successfully loaded from AWS Secrets Manager',
+            data: {
+                secretName,
+                github: data.github || '',
+                gitlab: data.gitlab || '',
+                instance_url: data.instance_url || '',
+                github_client_id: data.github_client_id || '',
+                github_client_secret: data.github_client_secret || '',
+                gitlab_client_id: data.gitlab_client_id || '',
+                gitlab_client_secret: data.gitlab_client_secret || ''
+            }
+        });
+    } catch (err) {
+        console.error('Error loading from AWS Secrets Manager:', err);
+        if (isTokenExpiredError(err)) {
+            awsCredentialsExpired = true;
+            return res.status(401).json({
+                success: false,
+                tokenExpired: true,
+                profile: awsProfile,
+                error: 'AWS credentials have expired. Please login again.',
+                loginCommand: `aws sso login --profile ${awsProfile}`
+            });
+        }
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -902,6 +1107,50 @@ const asgClient = new AutoScalingClient(awsConfig);
 const cwClient = new CloudWatchClient(awsConfig);
 const route53Client = new Route53Client({ ...awsConfig, region: 'us-east-1' });
 const ssmClient = new SSMClient(awsConfig);
+
+async function loadTokensFromVault() {
+    const secretName = process.env.AWS_SECRET_NAME;
+    if (!secretName) {
+        console.log('[vault] AWS_SECRET_NAME not set. Skipping autoload.');
+        return;
+    }
+    try {
+        console.log(`[vault] Attempting to load tokens from AWS secret "${secretName}"...`);
+        const res = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretName }));
+        if (res.SecretString) {
+            const data = JSON.parse(res.SecretString);
+            console.log('[vault] Successfully retrieved tokens from AWS Secret Manager.');
+            
+            if (data.github) process.env.SYNECHRON_GITHUB_TOKEN = data.github;
+            if (data.gitlab) process.env.GITLAB_PAT = data.gitlab;
+            if (data.instance_url) {
+                process.env.GITLAB_URL = data.instance_url;
+                try {
+                    const url = new URL(data.instance_url);
+                    gitlabHost = url.hostname;
+                } catch (e) {}
+            }
+            if (data.github_client_id) {
+                process.env.GITHUB_OAUTH_CLIENT_ID = data.github_client_id;
+                githubClientId = data.github_client_id;
+            }
+            if (data.github_client_secret) {
+                process.env.GITHUB_OAUTH_CLIENT_SECRET = data.github_client_secret;
+                githubClientSecret = data.github_client_secret;
+            }
+            if (data.gitlab_client_id) {
+                process.env.GITLAB_OAUTH_CLIENT_ID = data.gitlab_client_id;
+                gitlabClientId = data.gitlab_client_id;
+            }
+            if (data.gitlab_client_secret) {
+                process.env.GITLAB_OAUTH_CLIENT_SECRET = data.gitlab_client_secret;
+                gitlabClientSecret = data.gitlab_client_secret;
+            }
+        }
+    } catch (err) {
+        console.error(`[vault] Error autoloading from secret "${secretName}":`, err.message);
+    }
+}
 
 
 
@@ -1937,4 +2186,5 @@ app.listen(port, () => {
     } catch (e) {
         console.error("Failed to write .server.pid:", e);
     }
+    loadTokensFromVault();
 });
