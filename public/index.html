@@ -253,6 +253,68 @@
             background-color: rgba(241, 245, 249, 0.85) !important;
         }
 
+        /* Warning / Lag explanation banners */
+        html:not(.dark) .mtd-lag-warning {
+            background-color: rgba(254, 243, 199, 0.9) !important; /* amber-100 */
+            border-color: rgba(245, 158, 11, 0.5) !important; /* amber-500 */
+            color: #78350f !important; /* amber-900 */
+        }
+        html:not(.dark) .mtd-lag-warning * {
+            color: #78350f !important;
+        }
+
+        /* Green text & background overrides in light mode */
+        html:not(.dark) .text-emerald-400 {
+            color: #047857 !important; /* emerald-700 */
+        }
+        html:not(.dark) .text-emerald-300 {
+            color: #065f46 !important; /* emerald-800 */
+        }
+        html:not(.dark) .bg-emerald-950\/40,
+        html:not(.dark) .bg-emerald-900\/40,
+        html:not(.dark) .bg-emerald-900\/30 {
+            background-color: rgba(209, 250, 229, 0.7) !important; /* emerald-100 */
+            color: #047857 !important;
+        }
+        html:not(.dark) .border-emerald-700\/40,
+        html:not(.dark) .border-emerald-700\/30 {
+            border-color: rgba(52, 211, 153, 0.5) !important; /* emerald-400 */
+        }
+
+        /* Blue text & background overrides in light mode */
+        html:not(.dark) .text-blue-400 {
+            color: #1d4ed8 !important; /* blue-700 */
+        }
+        html:not(.dark) .text-blue-300 {
+            color: #1e40af !important; /* blue-800 */
+        }
+        html:not(.dark) .bg-blue-950\/40,
+        html:not(.dark) .bg-blue-900\/40,
+        html:not(.dark) .bg-blue-900\/30 {
+            background-color: rgba(219, 234, 254, 0.7) !important; /* blue-100 */
+            color: #1d4ed8 !important;
+        }
+        html:not(.dark) .border-blue-700\/40,
+        html:not(.dark) .border-blue-700\/30 {
+            border-color: rgba(96, 165, 250, 0.5) !important; /* blue-400 */
+        }
+
+        /* Cyan/Sky overrides (EKS etc.) in light mode */
+        html:not(.dark) .text-cyan-400 {
+            color: #0369a1 !important; /* sky-700 */
+        }
+        html:not(.dark) .bg-cyan-950\/40,
+        html:not(.dark) .bg-cyan-900\/40,
+        html:not(.dark) .bg-cyan-900\/30 {
+            background-color: rgba(224, 242, 254, 0.7) !important; /* sky-100 */
+            color: #0369a1 !important;
+        }
+        html:not(.dark) .border-cyan-700\/40,
+        html:not(.dark) .border-cyan-700\/30,
+        html:not(.dark) .border-cyan-800\/40 {
+            border-color: rgba(56, 189, 248, 0.5) !important; /* sky-400 */
+        }
+
         /* Shared assistant styles loaded dynamically from shared-assistant.js */
     </style>
     <!-- FontAwesome for Assistant Icon -->
@@ -440,7 +502,7 @@
                 </div>
 
                 <!-- Lag explanation -->
-                <div class="mt-4 p-3 rounded-lg bg-amber-950/20 border border-amber-800/20 text-[10px] text-amber-400/80 flex gap-2 items-start">
+                <div class="mtd-lag-warning mt-4 p-3 rounded-lg bg-amber-950/20 border border-amber-800/20 text-[10px] text-amber-400/80 flex gap-2 items-start">
                     <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i>
                     <span><strong>Why does MTD Actual lag?</strong> AWS Cost Explorer ingests billing data once per day (usually by 08:00 UTC). Resources created today (like your new EKS cluster) will appear in the <em>Est. Monthly</em> column immediately but won't show in MTD Actual until tomorrow's update.</span>
                 </div>
