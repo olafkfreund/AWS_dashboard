@@ -1272,6 +1272,81 @@ const resolveGroup = (tags, defaultGroup) => {
     return defaultGroup;
 };
 
+const resolveOwner = (tags) => {
+    if (!tags) return 'unknown';
+    const targetKeys = ['owner', 'creator', 'createdby', 'created-by'];
+    if (Array.isArray(tags)) {
+        for (const tag of tags) {
+            if (tag && tag.Key && typeof tag.Key === 'string') {
+                const keyLower = tag.Key.toLowerCase();
+                if (targetKeys.includes(keyLower) && tag.Value) {
+                    return tag.Value;
+                }
+            }
+        }
+    } else if (typeof tags === 'object') {
+        for (const key of Object.keys(tags)) {
+            const keyLower = key.toLowerCase();
+            if (targetKeys.includes(keyLower) && tags[key]) {
+                return tags[key];
+            }
+        }
+    }
+    return 'unknown';
+};
+
+const resolveCreatedDate = (tags, defaultDate) => {
+    if (tags) {
+        const targetKeys = ['created', 'createddate', 'creationdate', 'created-date'];
+        if (Array.isArray(tags)) {
+            for (const tag of tags) {
+                if (tag && tag.Key && typeof tag.Key === 'string') {
+                    const keyLower = tag.Key.toLowerCase();
+                    if (targetKeys.includes(keyLower) && tag.Value) {
+                        return tag.Value;
+                    }
+                }
+            }
+        } else if (typeof tags === 'object') {
+            for (const key of Object.keys(tags)) {
+                const keyLower = key.toLowerCase();
+                if (targetKeys.includes(keyLower) && tags[key]) {
+                    return tags[key];
+                }
+            }
+        }
+    }
+    if (defaultDate) {
+        try {
+            return new Date(defaultDate).toISOString().split('T')[0];
+        } catch (_) {}
+    }
+    return 'unknown';
+};
+
+const resolveEolDate = (tags) => {
+    if (!tags) return 'N/A';
+    const targetKeys = ['eol', 'endoflife', 'end-of-life', 'terminationdate', 'termination-date'];
+    if (Array.isArray(tags)) {
+        for (const tag of tags) {
+            if (tag && tag.Key && typeof tag.Key === 'string') {
+                const keyLower = tag.Key.toLowerCase();
+                if (targetKeys.includes(keyLower) && tag.Value) {
+                    return tag.Value;
+                }
+            }
+        }
+    } else if (typeof tags === 'object') {
+        for (const key of Object.keys(tags)) {
+            const keyLower = key.toLowerCase();
+            if (targetKeys.includes(keyLower) && tags[key]) {
+                return tags[key];
+            }
+        }
+    }
+    return 'N/A';
+};
+
 // Endpoint to get all AWS resources (EC2 instances, S3 buckets, VPCs, Subnets, Security Groups)
 app.get('/api/resources', async (req, res) => {
     try {
@@ -1323,7 +1398,8 @@ app.get('/api/resources', async (req, res) => {
                                 publicIp: instance.PublicIpAddress || 'Private Only',
                                 costEstimate: stateName === 'running' ? cost.monthlyEstimate : '0.00',
                                 lastMonthUsage: cost.lastMonthUsage,
-                                lastMonthCost: cost.lastMonthCost
+                                lastMonthCost: cost.lastMonthCost,
+                                tags: instance.Tags
                             });
                         });
                     }
@@ -1432,7 +1508,8 @@ app.get('/api/resources', async (req, res) => {
                         publicIp: 'N/A (Virtual Network)',
                         costEstimate: '0.00',
                         lastMonthUsage: 'N/A',
-                        lastMonthCost: '0.00'
+                        lastMonthCost: '0.00',
+                        tags: vpc.Tags
                     });
                 });
             }
@@ -1456,7 +1533,8 @@ app.get('/api/resources', async (req, res) => {
                         publicIp: 'N/A (Network Subnet)',
                         costEstimate: '0.00',
                         lastMonthUsage: 'N/A',
-                        lastMonthCost: '0.00'
+                        lastMonthCost: '0.00',
+                        tags: subnet.Tags
                     });
                 });
             }
@@ -1480,7 +1558,8 @@ app.get('/api/resources', async (req, res) => {
                         publicIp: 'N/A (Firewall Rules)',
                         costEstimate: '0.00',
                         lastMonthUsage: 'N/A',
-                        lastMonthCost: '0.00'
+                        lastMonthCost: '0.00',
+                        tags: sg.Tags
                     });
                 });
             }
@@ -1507,7 +1586,8 @@ app.get('/api/resources', async (req, res) => {
                         costEstimate: monthlyCost,
                         lastMonthUsage: `EIP: ${publicIp}`,
                         lastMonthCost: monthlyCost,
-                        region: process.env.AWS_REGION || 'eu-west-2'
+                        region: process.env.AWS_REGION || 'eu-west-2',
+                        tags: nat.Tags
                     });
                 });
             }
@@ -1532,7 +1612,8 @@ app.get('/api/resources', async (req, res) => {
                         publicIp: 'N/A (Gateway)',
                         costEstimate: '0.00',
                         lastMonthUsage: 'N/A',
-                        lastMonthCost: '0.00'
+                        lastMonthCost: '0.00',
+                        tags: igw.Tags
                     });
                 });
             }
@@ -1599,6 +1680,7 @@ app.get('/api/resources', async (req, res) => {
                         privateAccess: cluster.resourcesVpcConfig?.endpointPrivateAccess ?? true,
                         nodeCount:    nodeGroupCostTotal > 0 ? validNGs?.reduce((s,ng)=>s+(ng.scalingConfig?.desiredSize||0),0) : 0,
                         totalNodes:   validNGs?.reduce ? validNGs.reduce((s,ng)=>s+(ng.scalingConfig?.desiredSize||0),0) : 0,
+                        tags: cluster.tags
                     });
                 } catch (descErr) {
                     console.error('Error describing EKS cluster', clusterName, descErr.message);
@@ -1641,7 +1723,8 @@ app.get('/api/resources', async (req, res) => {
                     lastMonthUsage: functionUrl ? 'Public Function URL' : 'Internal only',
                     lastMonthCost: memoryCost,
                     region: fn.FunctionArn.split(':')[3] || 'eu-west-2',
-                    functionUrl
+                    functionUrl,
+                    tags: fn.Tags || null
                 });
             }
         } catch (lambdaErr) { console.error('Error fetching Lambda functions:', lambdaErr.message); }
@@ -1667,7 +1750,8 @@ app.get('/api/resources', async (req, res) => {
                         publicIp: 'N/A',
                         costEstimate: '0.00',
                         lastMonthUsage: 'N/A',
-                        lastMonthCost: '0.00'
+                        lastMonthCost: '0.00',
+                        tags: role.Tags || null
                     });
                 });
                 marker = r.IsTruncated ? r.Marker : null;
@@ -1691,7 +1775,8 @@ app.get('/api/resources', async (req, res) => {
                         publicIp: 'N/A',
                         costEstimate: '0.00',
                         lastMonthUsage: 'N/A',
-                        lastMonthCost: '0.00'
+                        lastMonthCost: '0.00',
+                        tags: user.Tags || null
                     });
                 });
                 marker = r.IsTruncated ? r.Marker : null;
@@ -1715,7 +1800,8 @@ app.get('/api/resources', async (req, res) => {
                     publicIp: db.Endpoint?.Address || 'Private',
                     costEstimate: ['available', 'running'].includes(db.DBInstanceStatus) ? cost : '0.00',
                     lastMonthUsage: db.DBInstanceClass,
-                    lastMonthCost: cost
+                    lastMonthCost: cost,
+                    tags: db.TagList || null
                 });
             });
         } catch (e) { console.error('Error fetching RDS instances:', e.message); }
@@ -1735,7 +1821,8 @@ app.get('/api/resources', async (req, res) => {
                     publicIp: cluster.Endpoint || 'Private',
                     costEstimate: '0.00', // billed at instance level
                     lastMonthUsage: cluster.Engine,
-                    lastMonthCost: '0.00'
+                    lastMonthCost: '0.00',
+                    tags: cluster.TagList || null
                 });
             });
         } catch (e) { console.error('Error fetching RDS clusters:', e.message); }
@@ -1837,7 +1924,8 @@ app.get('/api/resources', async (req, res) => {
                     publicIp: 'N/A',
                     costEstimate: '0.40', // $0.40/secret/month
                     lastMonthUsage: 'N/A',
-                    lastMonthCost: '0.40'
+                    lastMonthCost: '0.40',
+                    tags: secret.Tags || null
                 });
             });
         } catch (e) { console.error('Error fetching Secrets Manager:', e.message); }
@@ -1878,7 +1966,8 @@ app.get('/api/resources', async (req, res) => {
                     publicIp: 'N/A',
                     costEstimate: '0.00', // instances billed separately
                     lastMonthUsage: `${g.Instances?.length || 0} instances`,
-                    lastMonthCost: '0.00'
+                    lastMonthCost: '0.00',
+                    tags: g.Tags || null
                 });
             });
         } catch (e) { console.error('Error fetching ASGs:', e.message); }
@@ -1962,7 +2051,8 @@ app.get('/api/resources', async (req, res) => {
                     publicIp: vol.Attachments?.[0]?.InstanceId || 'Unattached',
                     costEstimate: cost,
                     lastMonthUsage: `${vol.Size}GB ${vol.VolumeType}`,
-                    lastMonthCost: cost
+                    lastMonthCost: cost,
+                    tags: vol.Tags || null
                 });
             });
         } catch (e) { console.error('Error fetching EBS volumes:', e.message); }
@@ -1982,10 +2072,18 @@ app.get('/api/resources', async (req, res) => {
                     publicIp: addr.PublicIp,
                     costEstimate: addr.AssociationId ? '0.00' : '3.65', // $3.65/mo when idle
                     lastMonthUsage: addr.AssociationId ? 'In use' : 'IDLE (cost applies)',
-                    lastMonthCost: addr.AssociationId ? '0.00' : '3.65'
+                    lastMonthCost: addr.AssociationId ? '0.00' : '3.65',
+                    tags: addr.Tags || null
                 });
             });
         } catch (e) { console.error('Error fetching Elastic IPs:', e.message); }
+
+        resources.forEach(r => {
+            r.owner = resolveOwner(r.tags);
+            r.createdDate = resolveCreatedDate(r.tags, r.launchTime);
+            r.eolDate = resolveEolDate(r.tags);
+            delete r.tags;
+        });
 
         const hasTransient = resources.some(r =>
             ['creating', 'pending', 'updating', 'deleting'].includes(r.state) || r.isTransient
