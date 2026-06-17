@@ -1249,6 +1249,29 @@ const getS3CostEstimate = (bucketName) => {
     };
 };
 
+const resolveGroup = (tags, defaultGroup) => {
+    if (!tags) return defaultGroup;
+    const targetKeys = ['dashboardgroup', 'project', 'group', 'team', 'customer', 'demoservice', 'dashboard-group'];
+    if (Array.isArray(tags)) {
+        for (const tag of tags) {
+            if (tag && tag.Key && typeof tag.Key === 'string') {
+                const keyLower = tag.Key.toLowerCase();
+                if (targetKeys.includes(keyLower) && tag.Value) {
+                    return tag.Value;
+                }
+            }
+        }
+    } else if (typeof tags === 'object') {
+        for (const key of Object.keys(tags)) {
+            const keyLower = key.toLowerCase();
+            if (targetKeys.includes(keyLower) && tags[key]) {
+                return tags[key];
+            }
+        }
+    }
+    return defaultGroup;
+};
+
 // Endpoint to get all AWS resources (EC2 instances, S3 buckets, VPCs, Subnets, Security Groups)
 app.get('/api/resources', async (req, res) => {
     try {
@@ -1294,7 +1317,7 @@ app.get('/api/resources', async (req, res) => {
                                 name: nameTag ? nameTag.Value : 'Unnamed EC2',
                                 type: type,
                                 service: 'EC2',
-                                group: eksClusterTag ? `EKS: ${eksClusterTag.Value}` : 'EC2 Instances',
+                                group: resolveGroup(instance.Tags, eksClusterTag ? `EKS: ${eksClusterTag.Value}` : 'EC2 Instances'),
                                 state: stateName,
                                 launchTime: instance.LaunchTime,
                                 publicIp: instance.PublicIpAddress || 'Private Only',
@@ -1321,7 +1344,7 @@ app.get('/api/resources', async (req, res) => {
                         name: bucket.Name,
                         type: 'Standard S3 Bucket',
                         service: 'S3',
-                        group: 'S3 Buckets',
+                        group: resolveGroup(null, 'S3 Buckets'),
                         state: 'running',
                         launchTime: bucket.CreationDate,
                         publicIp: 'N/A (Object Storage)',
@@ -1376,7 +1399,7 @@ app.get('/api/resources', async (req, res) => {
                     name,
                     type: `CloudFormation Stack • ${status.replace(/_/g, ' ')}`,
                     service: 'CloudFormation',
-                    group,
+                    group: resolveGroup(null, group),
                     state,
                     launchTime: stack.CreationTime,
                     publicIp: 'N/A (Infrastructure Stack)',
@@ -1403,7 +1426,7 @@ app.get('/api/resources', async (req, res) => {
                         name: vpcName,
                         type: vpc.CidrBlock,
                         service: 'VPC',
-                        group: `Network: ${vpcName}`,
+                        group: resolveGroup(vpc.Tags, `Network: ${vpcName}`),
                         state: 'running',
                         launchTime: null,
                         publicIp: 'N/A (Virtual Network)',
@@ -1427,7 +1450,7 @@ app.get('/api/resources', async (req, res) => {
                         name: nameTag ? nameTag.Value : 'Unnamed Subnet',
                         type: `${subnet.CidrBlock} (${subnet.AvailabilityZone})`,
                         service: 'Subnet',
-                        group: `Network: ${vpcName}`,
+                        group: resolveGroup(subnet.Tags, `Network: ${vpcName}`),
                         state: 'running',
                         launchTime: null,
                         publicIp: 'N/A (Network Subnet)',
@@ -1451,7 +1474,7 @@ app.get('/api/resources', async (req, res) => {
                         name: nameTag ? nameTag.Value : sg.GroupName,
                         type: sg.Description || 'Security Group',
                         service: 'SecurityGroup',
-                        group: `Network: ${vpcName}`,
+                        group: resolveGroup(sg.Tags, `Network: ${vpcName}`),
                         state: 'running',
                         launchTime: null,
                         publicIp: 'N/A (Firewall Rules)',
@@ -1477,7 +1500,7 @@ app.get('/api/resources', async (req, res) => {
                         name: nameTag ? nameTag.Value : nat.NatGatewayId,
                         type: `NAT Gateway (${nat.SubnetId || 'unknown subnet'})`,
                         service: 'NAT Gateway',
-                        group: `Network: ${vpcName}`,
+                        group: resolveGroup(nat.Tags, `Network: ${vpcName}`),
                         state: nat.State === 'available' ? 'running' : nat.State,
                         launchTime: nat.CreateTime,
                         publicIp,
@@ -1503,7 +1526,7 @@ app.get('/api/resources', async (req, res) => {
                         name: nameTag ? nameTag.Value : igw.InternetGatewayId,
                         type: `Internet Gateway → ${vpcName}`,
                         service: 'Internet Gateway',
-                        group: `Network: ${vpcName}`,
+                        group: resolveGroup(igw.Tags, `Network: ${vpcName}`),
                         state: igw.Attachments?.[0]?.State === 'available' ? 'running' : 'detached',
                         launchTime: null,
                         publicIp: 'N/A (Gateway)',
@@ -1558,7 +1581,7 @@ app.get('/api/resources', async (req, res) => {
                         name:         cluster.name,
                         type:         `EKS v${cluster.version} • ${nodeGroupSummary}`,
                         service:      'EKS',
-                        group:        `EKS: ${cluster.name}`,
+                        group:        resolveGroup(cluster.tags, `EKS: ${cluster.name}`),
                         state:        cluster.status === 'ACTIVE' ? 'running' : cluster.status.toLowerCase(),
                         launchTime:   cluster.createdAt,
                         publicIp:     cluster.endpoint || null,
@@ -1610,7 +1633,7 @@ app.get('/api/resources', async (req, res) => {
                     name: fn.FunctionName,
                     type: `Lambda ${fn.Runtime} • ${fn.MemorySize || 128}MB • ${fn.Timeout || 3}s timeout`,
                     service: 'Lambda',
-                    group: 'Lambda Functions',
+                    group: resolveGroup(fn.Tags || null, 'Lambda Functions'),
                     state: fn.State === 'Active' || !fn.State ? 'running' : fn.State.toLowerCase(),
                     launchTime: fn.LastModified,
                     publicIp: functionUrl ? functionUrl.replace('https://', '').replace(/\/$/, '') : 'No public URL',
@@ -1638,7 +1661,7 @@ app.get('/api/resources', async (req, res) => {
                         name: role.RoleName,
                         type: `IAM Role • ${role.Path}`,
                         service: 'IAM Role',
-                        group: 'IAM',
+                        group: resolveGroup(role.Tags || null, 'IAM'),
                         state: 'running',
                         launchTime: role.CreateDate,
                         publicIp: 'N/A',
@@ -1662,7 +1685,7 @@ app.get('/api/resources', async (req, res) => {
                         name: user.UserName,
                         type: `IAM User • ${user.Path}`,
                         service: 'IAM User',
-                        group: 'IAM',
+                        group: resolveGroup(user.Tags || null, 'IAM'),
                         state: 'running',
                         launchTime: user.CreateDate,
                         publicIp: 'N/A',
@@ -1686,7 +1709,7 @@ app.get('/api/resources', async (req, res) => {
                     name: db.DBInstanceIdentifier,
                     type: `RDS ${db.Engine} ${db.EngineVersion} • ${db.DBInstanceClass}`,
                     service: 'RDS',
-                    group: 'Databases',
+                    group: resolveGroup(db.TagList || null, 'Databases'),
                     state: db.DBInstanceStatus === 'available' ? 'running' : db.DBInstanceStatus,
                     launchTime: db.InstanceCreateTime,
                     publicIp: db.Endpoint?.Address || 'Private',
@@ -1706,7 +1729,7 @@ app.get('/api/resources', async (req, res) => {
                     name: cluster.DBClusterIdentifier,
                     type: `Aurora ${cluster.Engine} ${cluster.EngineVersion} Cluster`,
                     service: 'RDS Aurora',
-                    group: 'Databases',
+                    group: resolveGroup(cluster.TagList || null, 'Databases'),
                     state: cluster.Status === 'available' ? 'running' : cluster.Status,
                     launchTime: cluster.ClusterCreateTime,
                     publicIp: cluster.Endpoint || 'Private',
@@ -1726,7 +1749,7 @@ app.get('/api/resources', async (req, res) => {
                     name,
                     type: 'DynamoDB Table',
                     service: 'DynamoDB',
-                    group: 'Databases',
+                    group: resolveGroup(null, 'Databases'),
                     state: 'running',
                     launchTime: null,
                     publicIp: 'N/A (Serverless)',
@@ -1746,7 +1769,7 @@ app.get('/api/resources', async (req, res) => {
                     name: repo.repositoryName,
                     type: `ECR ${repo.imageTagMutability} • ${repo.encryptionConfiguration?.encryptionType || 'AES256'}`,
                     service: 'ECR',
-                    group: 'Container Registry',
+                    group: resolveGroup(null, 'Container Registry'),
                     state: 'running',
                     launchTime: repo.createdAt,
                     publicIp: repo.repositoryUri,
@@ -1767,7 +1790,7 @@ app.get('/api/resources', async (req, res) => {
                     name,
                     type: 'SNS Topic',
                     service: 'SNS',
-                    group: 'Messaging',
+                    group: resolveGroup(null, 'Messaging'),
                     state: 'running',
                     launchTime: null,
                     publicIp: 'N/A',
@@ -1788,7 +1811,7 @@ app.get('/api/resources', async (req, res) => {
                     name,
                     type: name.endsWith('.fifo') ? 'SQS FIFO Queue' : 'SQS Standard Queue',
                     service: 'SQS',
-                    group: 'Messaging',
+                    group: resolveGroup(null, 'Messaging'),
                     state: 'running',
                     launchTime: null,
                     publicIp: 'N/A',
@@ -1808,7 +1831,7 @@ app.get('/api/resources', async (req, res) => {
                     name: secret.Name,
                     type: `Secret • ${secret.SecretVersionsToStages ? 'Active' : 'Pending'}`,
                     service: 'Secrets Manager',
-                    group: 'Security & Secrets',
+                    group: resolveGroup(secret.Tags || null, 'Security & Secrets'),
                     state: 'running',
                     launchTime: secret.CreatedDate,
                     publicIp: 'N/A',
@@ -1829,7 +1852,7 @@ app.get('/api/resources', async (req, res) => {
                     name: lb.LoadBalancerName,
                     type: `${lb.Type?.toUpperCase() || 'ALB'} Load Balancer • ${lb.Scheme}`,
                     service: 'Load Balancer',
-                    group: 'Networking',
+                    group: resolveGroup(null, 'Networking'),
                     state: lb.State?.Code === 'active' ? 'running' : lb.State?.Code || 'unknown',
                     launchTime: lb.CreatedTime,
                     publicIp: lb.DNSName || 'N/A',
@@ -1849,7 +1872,7 @@ app.get('/api/resources', async (req, res) => {
                     name: g.AutoScalingGroupName,
                     type: `ASG • min:${g.MinSize} max:${g.MaxSize} desired:${g.DesiredCapacity}`,
                     service: 'Auto Scaling',
-                    group: 'Compute',
+                    group: resolveGroup(g.Tags || null, 'Compute'),
                     state: g.DesiredCapacity > 0 ? 'running' : 'stopped',
                     launchTime: g.CreatedTime,
                     publicIp: 'N/A',
@@ -1870,7 +1893,7 @@ app.get('/api/resources', async (req, res) => {
                     name: alarm.AlarmName,
                     type: `CloudWatch Alarm • ${alarm.Statistic || alarm.ExtendedStatistic} ${alarm.MetricName}`,
                     service: 'CloudWatch',
-                    group: 'Monitoring',
+                    group: resolveGroup(null, 'Monitoring'),
                     state: stateMap[alarm.StateValue] || 'unknown',
                     launchTime: alarm.AlarmConfigurationUpdatedTimestamp,
                     publicIp: alarm.StateValue,
@@ -1890,7 +1913,7 @@ app.get('/api/resources', async (req, res) => {
                     name: zone.Name.replace(/\.$/, ''),
                     type: `Route53 ${zone.Config?.PrivateZone ? 'Private' : 'Public'} Zone • ${zone.ResourceRecordSetCount} records`,
                     service: 'Route53',
-                    group: 'DNS & Domains',
+                    group: resolveGroup(null, 'DNS & Domains'),
                     state: 'running',
                     launchTime: null,
                     publicIp: 'N/A',
@@ -1910,7 +1933,7 @@ app.get('/api/resources', async (req, res) => {
                     name: p.Name.split('/').pop(),
                     type: `SSM ${p.Type} Parameter`,
                     service: 'SSM Parameter',
-                    group: 'Security & Secrets',
+                    group: resolveGroup(null, 'Security & Secrets'),
                     state: 'running',
                     launchTime: p.LastModifiedDate,
                     publicIp: 'N/A',
@@ -1933,7 +1956,7 @@ app.get('/api/resources', async (req, res) => {
                     name: nameTag?.Value || vol.VolumeId,
                     type: `EBS ${vol.VolumeType?.toUpperCase()} • ${vol.Size}GB`,
                     service: 'EBS Volume',
-                    group: 'Storage',
+                    group: resolveGroup(vol.Tags || null, 'Storage'),
                     state: vol.State === 'in-use' ? 'running' : vol.State,
                     launchTime: vol.CreateTime,
                     publicIp: vol.Attachments?.[0]?.InstanceId || 'Unattached',
@@ -1953,7 +1976,7 @@ app.get('/api/resources', async (req, res) => {
                     name: addr.Tags?.find(t => t.Key === 'Name')?.Value || addr.PublicIp,
                     type: `Elastic IP • ${addr.Domain} • ${addr.AssociationId ? 'Associated' : 'Unassociated'}`,
                     service: 'Elastic IP',
-                    group: 'Networking',
+                    group: resolveGroup(addr.Tags || null, 'Networking'),
                     state: 'running',
                     launchTime: null,
                     publicIp: addr.PublicIp,
