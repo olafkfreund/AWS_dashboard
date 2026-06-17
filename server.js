@@ -35,7 +35,7 @@ const { AutoScalingClient, DescribeAutoScalingGroupsCommand } = require('@aws-sd
 const { CloudWatchClient, DescribeAlarmsCommand } = require('@aws-sdk/client-cloudwatch');
 const { Route53Client, ListHostedZonesCommand, ListResourceRecordSetsCommand } = require('@aws-sdk/client-route-53');
 const { SSMClient, DescribeParametersCommand } = require('@aws-sdk/client-ssm');
-const { fromIni } = require('@aws-sdk/credential-providers');
+const { fromIni, fromSSO } = require('@aws-sdk/credential-providers');
 const { SSOClient, GetRoleCredentialsCommand, ListAccountsCommand, ListAccountRolesCommand } = require("@aws-sdk/client-sso");
 const { SSOOIDCClient, RegisterClientCommand, StartDeviceAuthorizationCommand, CreateTokenCommand } = require("@aws-sdk/client-sso-oidc");
 
@@ -182,7 +182,56 @@ app.get('/api/auth/config', (req, res) => {
         gitlabEnabled: !!(gitlabClientId && gitlabClientSecret),
         gitlabHost: gitlabHost,
         awsProfile: activeProfile,
-        awsIsSSO: !(activeProfile === 'Calitii' || activeProfile === 'default' || activeProfile.includes('static'))
+        awsIsSSO: !(activeProfile === 'Calitii' || activeProfile === 'default' || activeProfile.includes('static')),
+        awsCredentialsExpired
+    });
+});
+
+// Check live AWS credential validity + expiry time
+app.get('/api/auth/token-status', async (req, res) => {
+    try {
+        const credProvider = makeAwsCredentials(awsProfile);
+        const creds = await credProvider();
+        const expiry = creds.expiration ? new Date(creds.expiration) : null;
+        const msLeft = expiry ? expiry.getTime() - Date.now() : null;
+        awsCredentialsExpired = false;
+        res.json({
+            valid: true,
+            profile: awsProfile,
+            expiry: expiry ? expiry.toISOString() : null,
+            minutesLeft: msLeft ? Math.floor(msLeft / 60000) : null,
+            willExpireSoon: msLeft ? msLeft < 30 * 60 * 1000 : false // < 30 min
+        });
+    } catch (e) {
+        awsCredentialsExpired = true;
+        res.json({
+            valid: false,
+            profile: awsProfile,
+            error: e.message,
+            expiry: null,
+            minutesLeft: null
+        });
+    }
+});
+
+// Trigger aws sso login for the active profile (opens browser on the server machine)
+app.post('/api/auth/sso-refresh', (req, res) => {
+    const profile = awsProfile;
+    console.log(`[sso-refresh] Triggering: aws sso login --profile ${profile}`);
+    // Non-blocking: run in background, frontend polls /api/auth/token-status
+    exec(`aws sso login --profile ${profile} --no-browser 2>&1`, { timeout: 300000 }, (err, stdout, stderr) => {
+        if (err) {
+            console.error('[sso-refresh] Failed:', stderr || err.message);
+        } else {
+            awsCredentialsExpired = false;
+            console.log('[sso-refresh] SSO login completed');
+        }
+    });
+    res.json({
+        success: true,
+        message: `SSO login initiated for profile "${profile}". Run: aws sso login --profile ${profile}`,
+        loginCommand: `aws sso login --profile ${profile}`,
+        ssoStartUrl: 'https://view.awsapps.com/start'
     });
 });
 
@@ -397,10 +446,45 @@ delete process.env.AWS_ACCESS_KEY_ID;
 delete process.env.AWS_SECRET_ACCESS_KEY;
 delete process.env.AWS_SESSION_TOKEN;
 
+// Use fromIni which re-reads ~/.aws/credentials on every credential resolution.
+// This means updating the credentials file (via any SSO/STS refresh mechanism)
+// automatically takes effect on the next API call — no server restart needed.
+function makeAwsCredentials(profile) {
+    return fromIni({ profile });
+}
+
 const awsConfig = {
-    credentials: fromIni({ profile: awsProfile }),
+    credentials: makeAwsCredentials(awsProfile),
     region: process.env.AWS_REGION || 'eu-west-2'
 };
+
+// Helper: detect AWS token expiry errors
+function isTokenExpiredError(err) {
+    const code = err?.name || err?.Code || err?.code || '';
+    const msg  = err?.message || '';
+    return (
+        code === 'ExpiredTokenException' ||
+        code === 'ExpiredToken' ||
+        code === 'TokenExpiredException' ||
+        msg.includes('expired') ||
+        msg.includes('Expired')
+    );
+}
+
+// Shared server-side flag so middleware can signal the frontend
+let awsCredentialsExpired = false;
+
+// Proactively check credentials every 30 min and set the flag
+setInterval(async () => {
+    try {
+        const creds = await makeAwsCredentials(awsProfile)();
+        awsCredentialsExpired = false;
+        console.log('[credCheck] Credentials valid — expiry:', creds.expiration || 'no expiry');
+    } catch (e) {
+        awsCredentialsExpired = true;
+        console.warn('[credCheck] Credentials expired or invalid:', e.message);
+    }
+}, 30 * 60 * 1000);
 
 // In-memory OIDC client registration cache
 let oidcClientCache = null;
@@ -921,7 +1005,26 @@ app.get('/api/resources', async (req, res) => {
     try {
         const { ec2, s3, eks, lambda, cfn } = getAwsClients(req);
         const resources = [];
-        
+
+        // Fast-fail on expired credentials before fetching everything
+        try {
+            await ec2.send(new DescribeInstancesCommand({ MaxResults: 5 }));
+            awsCredentialsExpired = false;
+        } catch (credErr) {
+            if (isTokenExpiredError(credErr)) {
+                awsCredentialsExpired = true;
+                return res.status(401).json({
+                    success: false,
+                    tokenExpired: true,
+                    profile: awsProfile,
+                    error: 'AWS credentials have expired. Please run: aws sso login --profile ' + awsProfile,
+                    loginCommand: `aws sso login --profile ${awsProfile}`,
+                    ssoStartUrl: 'https://view.awsapps.com/start'
+                });
+            }
+            // Non-auth error — continue with partial results
+        }
+
         // 1. Fetch EC2 instances (all states)
         try {
             const command = new DescribeInstancesCommand({});

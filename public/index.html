@@ -740,6 +740,91 @@
             }
         }
 
+        // ── AWS Token Expiry Banner ──────────────────────────────────────────────
+        function showAwsTokenExpiredBanner(data) {
+            const cmd = data?.loginCommand || `aws sso login --profile Synechron`;
+            const url = data?.ssoStartUrl || 'https://view.awsapps.com/start';
+            const loader = document.getElementById('resources-loader');
+            if (loader) {
+                loader.classList.remove('hidden');
+                loader.innerHTML = `
+                    <div class="flex flex-col items-center gap-4 py-12">
+                        <i class="fa-solid fa-key text-4xl text-red-400"></i>
+                        <p class="text-white font-bold text-lg">AWS Credentials Expired</p>
+                        <p class="text-slate-400 text-sm text-center max-w-md">
+                            Your AWS SSO token has expired. Run the command below in your terminal,<br>
+                            then refresh this page.
+                        </p>
+                        <div class="bg-slate-900 border border-red-800/40 rounded-lg px-5 py-3 font-mono text-sm text-red-300 flex items-center gap-3">
+                            <span>${cmd}</span>
+                            <button onclick="navigator.clipboard.writeText('${cmd}').then(()=>this.innerHTML='<i class=\\'fa-solid fa-check\\'></i>')"
+                                class="text-slate-500 hover:text-white transition-colors ml-2" title="Copy">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="flex gap-3 mt-2">
+                            <a href="${url}" target="_blank" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-colors">
+                                <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i>Open AWS SSO Portal
+                            </a>
+                            <button onclick="fetchResources()" class="px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-white font-semibold text-sm border border-border transition-colors">
+                                <i class="fa-solid fa-arrows-rotate mr-2"></i>Retry
+                            </button>
+                        </div>
+                    </div>`;
+            }
+            // Also show the global top warning bar
+            showTokenWarningBar('expired', cmd, url);
+        }
+
+        function showTokenWarningBar(state, cmd, url, minutesLeft) {
+            let bar = document.getElementById('aws-token-warning-bar');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.id = 'aws-token-warning-bar';
+                bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:13px;font-weight:600;transition:all 0.3s;';
+                document.body.prepend(bar);
+            }
+            if (state === 'expired') {
+                bar.style.background = '#7f1d1d';
+                bar.style.color = '#fca5a5';
+                bar.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>
+                    AWS credentials expired &mdash;
+                    <code style="background:#450a0a;padding:2px 8px;border-radius:4px;font-size:11px;">${cmd}</code>
+                    <a href="${url}" target="_blank" style="color:#fbbf24;text-decoration:underline;">Open SSO Portal</a>
+                    <button onclick="fetchResources()" style="background:#b91c1c;border:none;color:white;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:11px;">Retry</button>`;
+            } else if (state === 'warning') {
+                bar.style.background = '#78350f';
+                bar.style.color = '#fcd34d';
+                bar.innerHTML = `<i class="fa-solid fa-clock"></i>
+                    AWS credentials expiring in <strong>${minutesLeft} min</strong> &mdash; run:
+                    <code style="background:#451a03;padding:2px 8px;border-radius:4px;font-size:11px;">${cmd}</code>
+                    <a href="${url}" target="_blank" style="color:#fbbf24;text-decoration:underline;">Open SSO Portal</a>`;
+            } else {
+                bar.remove();
+            }
+        }
+
+        // Background token watcher — checks every 5 min, warns at < 30 min left
+        async function startTokenWatcher() {
+            const check = async () => {
+                try {
+                    const r = await fetch('/api/auth/token-status');
+                    const d = await r.json();
+                    const cmd = `aws sso login --profile ${d.profile || 'Synechron'}`;
+                    const url = 'https://view.awsapps.com/start';
+                    if (!d.valid) {
+                        showTokenWarningBar('expired', cmd, url);
+                    } else if (d.willExpireSoon) {
+                        showTokenWarningBar('warning', cmd, url, d.minutesLeft);
+                    } else {
+                        showTokenWarningBar('ok');
+                    }
+                } catch {}
+            };
+            await check(); // immediate check on load
+            setInterval(check, 5 * 60 * 1000); // then every 5 min
+        }
+
         async function fetchSpending() {
             const icon = document.getElementById('cost-refresh-icon');
             if (icon) icon.classList.add('animate-spin');
@@ -1173,20 +1258,33 @@
             try {
                 const res = await fetch('/api/resources');
                 if (res.status === 401) {
-                    document.getElementById('resources-loader').innerHTML = `
-                        <div class="flex flex-col items-center gap-3 py-10">
-                            <i class="fa-solid fa-lock text-3xl text-amber-400"></i>
-                            <p class="text-white font-semibold">Session Expired</p>
-                            <p class="text-slate-400 text-sm text-center">Your session has expired or the server was restarted.<br>Please log in again to load AWS resources.</p>
-                            <a href="/login.html" class="mt-2 px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors">
-                                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>Log In Again
-                            </a>
-                        </div>`;
+                    let body = {};
+                    try { body = await res.json(); } catch {}
+
+                    if (body.tokenExpired) {
+                        // AWS SSO token expired — show renewal banner
+                        showAwsTokenExpiredBanner(body);
+                    } else {
+                        // Portal session expired — show login banner
+                        document.getElementById('resources-loader').innerHTML = `
+                            <div class="flex flex-col items-center gap-3 py-10">
+                                <i class="fa-solid fa-lock text-3xl text-amber-400"></i>
+                                <p class="text-white font-semibold">Session Expired</p>
+                                <p class="text-slate-400 text-sm text-center">Your session has expired or the server was restarted.<br>Please log in again to load AWS resources.</p>
+                                <a href="/login.html" class="mt-2 px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors">
+                                    <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>Log In Again
+                                </a>
+                            </div>`;
+                    }
                     return;
                 }
                 const data = await res.json();
-                
+
                 if (!data.success) {
+                    if (data.tokenExpired) {
+                        showAwsTokenExpiredBanner(data);
+                        return;
+                    }
                     document.getElementById('resources-loader').innerHTML = `<p class="text-red-400">Failed to load resources: ${data.error || 'Unknown error'}</p>`;
                     return;
                 }
@@ -2412,6 +2510,7 @@
             fetchLogins();
             fetchSpending();
             initializeWebMCP();
+            startTokenWatcher(); // monitor AWS credential expiry
             // K8s tab data loaded on demand when user clicks the Kubernetes tab (showView calls refreshK8sData)
             startRefreshInterval();
             
