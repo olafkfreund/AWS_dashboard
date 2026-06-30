@@ -875,6 +875,27 @@
 
             <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
                 <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
+                    <i class="fa-solid fa-scale-balanced mr-3 text-primary"></i> AWS Budget Configuration
+                </h2>
+                <p class="text-xs text-muted-foreground mb-6">Manually configure your AWS Monthly Budget limit. If the AWS Budgets API is not set up or returns no budgets, this value will be used as a fallback limit.</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-muted-foreground mb-2">Manual AWS Budget Limit ($)</label>
+                        <input type="number" id="settings-aws-budget-limit" class="w-full bg-secondary border border-border rounded-md px-4 py-2 text-foreground focus:outline-none focus:border-primary" placeholder="e.g. 1000">
+                    </div>
+                    
+                    <div class="pt-4 flex items-center gap-4">
+                        <button onclick="saveSettings()" class="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-md shadow-sm transition-colors">
+                            Save all to .envrc
+                        </button>
+                        <p id="settings-msg-budget" class="text-sm text-green-500 hidden"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-8 max-w-2xl mx-auto mt-6">
+                <h2 class="text-xl font-semibold mb-6 flex items-center text-card-foreground">
                     <i class="fa-solid fa-vault mr-3 text-primary"></i> AWS Secrets Vault Integration
                 </h2>
                 <p class="text-xs text-muted-foreground mb-6">Store and retrieve your GitHub & GitLab tokens securely in AWS Secrets Manager.</p>
@@ -1415,6 +1436,9 @@
                 document.getElementById('settings-gitlab-client-id').value = data.gitlab_client_id || '';
                 document.getElementById('settings-gitlab-client-secret').value = data.gitlab_client_secret || '';
                 document.getElementById('settings-aws-secret-name').value = data.aws_secret_name || '';
+                
+                const budgetLimitEl = document.getElementById('settings-aws-budget-limit');
+                if (budgetLimitEl) budgetLimitEl.value = data.aws_budget_limit || '';
             } catch (e) {
                 console.error("Failed to load settings", e);
             }
@@ -1438,7 +1462,9 @@
             const github_client_secret = document.getElementById('settings-github-client-secret').value;
             const gitlab_client_id = document.getElementById('settings-gitlab-client-id').value;
             const gitlab_client_secret = document.getElementById('settings-gitlab-client-secret').value;
+            const aws_budget_limit = document.getElementById('settings-aws-budget-limit')?.value || '';
             const msg = document.getElementById('settings-msg');
+            const msgBudget = document.getElementById('settings-msg-budget');
             
             // Save Interface Options to localStorage
             const selectEl = document.getElementById('settings-theme');
@@ -1463,14 +1489,23 @@
                         github_client_id, 
                         github_client_secret, 
                         gitlab_client_id, 
-                        gitlab_client_secret 
+                        gitlab_client_secret,
+                        aws_budget_limit
                     })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    msg.textContent = "Tokens securely saved to .envrc! Changes applied immediately across tabs.";
-                    msg.classList.remove('hidden', 'text-red-500');
-                    msg.classList.add('text-green-500');
+                    const successText = "Settings successfully saved to .envrc! Changes applied immediately.";
+                    if (msg) {
+                        msg.textContent = successText;
+                        msg.classList.remove('hidden', 'text-red-500');
+                        msg.classList.add('text-green-500');
+                    }
+                    if (msgBudget) {
+                        msgBudget.textContent = successText;
+                        msgBudget.classList.remove('hidden', 'text-red-500');
+                        msgBudget.classList.add('text-green-500');
+                    }
                     
                     if (github) localStorage.setItem('gh_pat', github);
                     if (gitlab) localStorage.setItem('gl_pat', gitlab);
@@ -1478,11 +1513,22 @@
                     throw new Error(data.error);
                 }
             } catch (e) {
-                msg.textContent = "Error saving settings: " + e.message;
-                msg.classList.remove('hidden', 'text-green-500');
-                msg.classList.add('text-red-500');
+                const errorText = "Error saving settings: " + e.message;
+                if (msg) {
+                    msg.textContent = errorText;
+                    msg.classList.remove('hidden', 'text-green-500');
+                    msg.classList.add('text-red-500');
+                }
+                if (msgBudget) {
+                    msgBudget.textContent = errorText;
+                    msgBudget.classList.remove('hidden', 'text-green-500');
+                    msgBudget.classList.add('text-red-500');
+                }
             }
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+            setTimeout(() => {
+                if (msg) msg.classList.add('hidden');
+                if (msgBudget) msgBudget.classList.add('hidden');
+            }, 3000);
         }
 
         async function saveToVault() {

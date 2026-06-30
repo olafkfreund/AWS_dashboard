@@ -191,17 +191,29 @@ app.get('/api/auth/config', (req, res) => {
 app.get('/api/auth/token-status', async (req, res) => {
     try {
         const credProvider = makeAwsCredentials(awsProfile);
-        const creds = await credProvider();
-        const expiry = creds.expiration ? new Date(creds.expiration) : null;
-        const msLeft = expiry ? expiry.getTime() - Date.now() : null;
-        awsCredentialsExpired = false;
-        res.json({
-            valid: true,
-            profile: awsProfile,
-            expiry: expiry ? expiry.toISOString() : null,
-            minutesLeft: msLeft ? Math.floor(msLeft / 60000) : null,
-            willExpireSoon: msLeft ? msLeft < 30 * 60 * 1000 : false // < 30 min
-        });
+        if (credProvider) {
+            const creds = await credProvider();
+            const expiry = creds.expiration ? new Date(creds.expiration) : null;
+            const msLeft = expiry ? expiry.getTime() - Date.now() : null;
+            awsCredentialsExpired = false;
+            res.json({
+                valid: true,
+                profile: awsProfile,
+                expiry: expiry ? expiry.toISOString() : null,
+                minutesLeft: msLeft ? Math.floor(msLeft / 60000) : null,
+                willExpireSoon: msLeft ? msLeft < 30 * 60 * 1000 : false // < 30 min
+            });
+        } else {
+            // Running inside EKS with Service Account IAM Role (IRSA)
+            awsCredentialsExpired = false;
+            res.json({
+                valid: true,
+                profile: "EKS-Service-Account-IAM-Role",
+                expiry: null,
+                minutesLeft: null,
+                willExpireSoon: false
+            });
+        }
     } catch (e) {
         awsCredentialsExpired = true;
         res.json({
@@ -449,7 +461,11 @@ delete process.env.AWS_SESSION_TOKEN;
 // Use fromIni which re-reads ~/.aws/credentials on every credential resolution.
 // This means updating the credentials file (via any SSO/STS refresh mechanism)
 // automatically takes effect on the next API call — no server restart needed.
+// If running in EKS (via IRSA / Pod Identity), we return undefined to let the SDK default to the EKS IAM Role.
 function makeAwsCredentials(profile) {
+    if (process.env.AWS_ROLE_ARN) {
+        return undefined;
+    }
     return fromIni({ profile });
 }
 
@@ -477,9 +493,15 @@ let awsCredentialsExpired = false;
 // Proactively check credentials every 30 min and set the flag
 setInterval(async () => {
     try {
-        const creds = await makeAwsCredentials(awsProfile)();
-        awsCredentialsExpired = false;
-        console.log('[credCheck] Credentials valid — expiry:', creds.expiration || 'no expiry');
+        const provider = makeAwsCredentials(awsProfile);
+        if (provider) {
+            const creds = await provider();
+            awsCredentialsExpired = false;
+            console.log('[credCheck] Credentials valid — expiry:', creds.expiration || 'no expiry');
+        } else {
+            // EKS IRSA credentials are managed dynamically by the AWS SDK
+            awsCredentialsExpired = false;
+        }
     } catch (e) {
         awsCredentialsExpired = true;
         console.warn('[credCheck] Credentials expired or invalid:', e.message);
@@ -593,7 +615,8 @@ app.post('/api/auth/sso/poll', async (req, res) => {
             
             console.log(`OIDC accessToken successfully retrieved (length: ${accessToken.length})`);
             
-            // Diagnostic: List accounts and roles available to this token
+            // List accounts and roles available to this token
+            let rolesList = [];
             try {
                 const listAccountsCommand = new ListAccountsCommand({ accessToken });
                 const accountsResponse = await ssoClient.send(listAccountsCommand);
@@ -606,7 +629,8 @@ app.post('/api/auth/sso/poll', async (req, res) => {
                         accountId: config.accountId
                     });
                     const rolesResponse = await ssoClient.send(listRolesCommand);
-                    console.log(`SSO Diagnostics - Available Roles for Account ${config.accountId}:`, JSON.stringify(rolesResponse.roleList, null, 2));
+                    rolesList = rolesResponse.roleList || [];
+                    console.log(`SSO Diagnostics - Available Roles for Account ${config.accountId}:`, JSON.stringify(rolesList, null, 2));
                 } else {
                     console.warn(`SSO Diagnostics WARNING: Target account ID ${config.accountId} is NOT in the user's assigned accounts list!`);
                 }
@@ -614,35 +638,25 @@ app.post('/api/auth/sso/poll', async (req, res) => {
                 console.error("SSO Diagnostics - Failed to list accounts/roles:", listError);
             }
 
-            const credentialsCommand = new GetRoleCredentialsCommand({
-                accessToken,
-                accountId: config.accountId,
-                roleName: config.roleName
-            });
+            // Determine a username to display.
+            let username = 'SSO User';
+            if (rolesList && rolesList.length > 0) {
+                username = `SSO:${rolesList[0].roleName}`;
+            }
 
-            const credentialsResponse = await ssoClient.send(credentialsCommand);
-            const creds = credentialsResponse.roleCredentials;
-
-            // Save credentials in a user session
+            // Save session WITHOUT credentials so the server queries AWS using the global EKS IAM role
             const sessionId = crypto.randomBytes(32).toString('hex');
-            const username = `SSO:${config.roleName}`;
             
             sessions.set(sessionId, {
                 username,
                 provider: 'aws-sso-direct',
-                credentials: {
-                    accessKeyId: creds.accessKeyId,
-                    secretAccessKey: creds.secretAccessKey,
-                    sessionToken: creds.sessionToken,
-                    expiration: creds.expiration
-                },
                 createdAt: Date.now()
             });
 
-            console.log(`AWS SSO Direct Verification Succeeded for ${username}`);
+            console.log(`AWS SSO Direct Verification Succeeded for ${username} (using EKS Pod Identity/default role for AWS queries)`);
             
             res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
-        saveSessions();
+            saveSessions();
             res.json({ success: true, status: 'approved', username });
         } catch (credError) {
             console.error("Failed to fetch AWS SSO role credentials:", credError);
@@ -663,7 +677,9 @@ app.get('/api/config/tokens', (req, res) => {
         github_client_id: null,
         github_client_secret: null,
         gitlab_client_id: null,
-        gitlab_client_secret: null
+        gitlab_client_secret: null,
+        aws_secret_name: null,
+        aws_budget_limit: null
     };
     
     // Inject session tokens if authenticated via OAuth
@@ -692,6 +708,7 @@ app.get('/api/config/tokens', (req, res) => {
             let gl_client_id = null;
             let gl_client_secret = null;
             let aws_secret_name = null;
+            let aws_budget_limit = null;
 
             content.split('\n').forEach(line => {
                 const cleanValue = (val) => val ? val.trim().replace(/['"\r\n]/g, '') : null;
@@ -706,6 +723,7 @@ app.get('/api/config/tokens', (req, res) => {
                 if (line.startsWith('export GITLAB_OAUTH_CLIENT_ID=')) gl_client_id = cleanValue(line.split('=')[1]);
                 if (line.startsWith('export GITLAB_OAUTH_CLIENT_SECRET=')) gl_client_secret = cleanValue(line.split('=')[1]);
                 if (line.startsWith('export AWS_SECRET_NAME=')) aws_secret_name = cleanValue(line.split('=')[1]);
+                if (line.startsWith('export AWS_BUDGET_LIMIT=')) aws_budget_limit = cleanValue(line.split('=')[1]);
             });
 
             tokens.github = synechron_github_token || github_token || github_pat;
@@ -716,6 +734,7 @@ app.get('/api/config/tokens', (req, res) => {
             tokens.gitlab_client_id = gl_client_id;
             tokens.gitlab_client_secret = gl_client_secret;
             tokens.aws_secret_name = aws_secret_name;
+            tokens.aws_budget_limit = aws_budget_limit;
         }
         // Fallback to process.env (also sanitize just in case)
         const sanitizeEnv = (val) => val ? val.replace(/[\r\n]/g, '').trim() : null;
@@ -726,6 +745,7 @@ app.get('/api/config/tokens', (req, res) => {
         if (!tokens.gitlab_client_id) tokens.gitlab_client_id = sanitizeEnv(process.env.GITLAB_OAUTH_CLIENT_ID);
         if (!tokens.gitlab_client_secret) tokens.gitlab_client_secret = sanitizeEnv(process.env.GITLAB_OAUTH_CLIENT_SECRET);
         if (!tokens.aws_secret_name) tokens.aws_secret_name = sanitizeEnv(process.env.AWS_SECRET_NAME);
+        if (!tokens.aws_budget_limit) tokens.aws_budget_limit = sanitizeEnv(process.env.AWS_BUDGET_LIMIT);
     } catch (e) {
         console.error('Error reading envrc for tokens:', e);
     }
@@ -735,7 +755,7 @@ app.get('/api/config/tokens', (req, res) => {
 // Endpoint to save PAT tokens into SARC .envrc
 app.post('/api/config/tokens', (req, res) => {
     try {
-        const { github, gitlab, instance_url, github_client_id, github_client_secret, gitlab_client_id, gitlab_client_secret } = req.body;
+        const { github, gitlab, instance_url, github_client_id, github_client_secret, gitlab_client_id, gitlab_client_secret, aws_budget_limit } = req.body;
         const envrcPath = path.join(__dirname, '..', 'Synechron_ARC', 'sarc', '.envrc');
         
         let lines = [];
@@ -754,7 +774,8 @@ app.post('/api/config/tokens', (req, res) => {
             !line.startsWith('export GITHUB_OAUTH_CLIENT_ID=') &&
             !line.startsWith('export GITHUB_OAUTH_CLIENT_SECRET=') &&
             !line.startsWith('export GITLAB_OAUTH_CLIENT_ID=') &&
-            !line.startsWith('export GITLAB_OAUTH_CLIENT_SECRET=')
+            !line.startsWith('export GITLAB_OAUTH_CLIENT_SECRET=') &&
+            !line.startsWith('export AWS_BUDGET_LIMIT=')
         );
         
         if (github) lines.push(`export SYNECHRON_GITHUB_TOKEN="${github}"`);
@@ -764,7 +785,12 @@ app.post('/api/config/tokens', (req, res) => {
         if (github_client_secret) lines.push(`export GITHUB_OAUTH_CLIENT_SECRET="${github_client_secret}"`);
         if (gitlab_client_id) lines.push(`export GITLAB_OAUTH_CLIENT_ID="${gitlab_client_id}"`);
         if (gitlab_client_secret) lines.push(`export GITLAB_OAUTH_CLIENT_SECRET="${gitlab_client_secret}"`);
+        if (aws_budget_limit) lines.push(`export AWS_BUDGET_LIMIT="${aws_budget_limit}"`);
         
+        const dir = path.dirname(envrcPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(envrcPath, lines.join('\n').trim() + '\n');
         
         // Dynamically apply changes in-memory
@@ -792,6 +818,8 @@ app.post('/api/config/tokens', (req, res) => {
         
         process.env.GITLAB_OAUTH_CLIENT_SECRET = gitlab_client_secret || '';
         gitlabClientSecret = gitlab_client_secret || null;
+
+        process.env.AWS_BUDGET_LIMIT = aws_budget_limit || '';
 
         res.json({ success: true, message: 'Settings saved to .envrc and applied in-memory' });
     } catch (e) {
@@ -2112,7 +2140,7 @@ app.get('/api/logins', async (req, res) => {
                 const c = req.user.credentials;
                 return new CloudTrailClient({ credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey, sessionToken: c.sessionToken }, region: r });
             }
-            return new CloudTrailClient({ ...cloudtrail.config, region: r });
+            return new CloudTrailClient({ region: r });
         };
 
         const ctUsEast1 = buildCloudTrailClient('us-east-1');
@@ -2120,12 +2148,12 @@ app.get('/api/logins', async (req, res) => {
 
         // Event types that represent human authentication/login actions
         const AUTH_EVENTS = [
-            { name: 'ConsoleLogin',              client: ctUsEast1  }, // IAM user / root console login
-            { name: 'ConsoleLogin',              client: ctRegional }, // Regional trail copy
-            { name: 'AssumeRoleWithSAML',        client: ctUsEast1  }, // SAML federation (SSO)
-            { name: 'AssumeRoleWithWebIdentity', client: ctUsEast1  }, // OIDC/web-identity federation
-            { name: 'UserAuthentication',        client: ctUsEast1  }, // IAM Identity Center SSO
-            { name: 'UserAuthentication',        client: ctRegional }, // Regional
+            { name: 'ConsoleLogin',              client: ctUsEast1,  region: 'us-east-1' }, // IAM user / root console login
+            { name: 'ConsoleLogin',              client: ctRegional, region: region },      // Regional trail copy
+            { name: 'AssumeRoleWithSAML',        client: ctUsEast1,  region: 'us-east-1' }, // SAML federation (SSO)
+            { name: 'AssumeRoleWithWebIdentity', client: ctUsEast1,  region: 'us-east-1' }, // OIDC/web-identity federation
+            { name: 'UserAuthentication',        client: ctUsEast1,  region: 'us-east-1' }, // IAM Identity Center SSO
+            { name: 'UserAuthentication',        client: ctRegional, region: region },      // Regional
         ];
 
         // Run all queries in parallel
@@ -2136,6 +2164,13 @@ app.get('/api/logins', async (req, res) => {
                 MaxResults: 50
             }))
         ));
+
+        // Log any errors/rejections
+        results.forEach((result, idx) => {
+            if (result.status === 'rejected') {
+                console.error(`[CloudTrail] LookupEvents for event "${AUTH_EVENTS[idx].name}" in client region "${AUTH_EVENTS[idx].region}" failed:`, result.reason);
+            }
+        });
 
         // Collect and deduplicate events by EventId
         const seen = new Set();
@@ -2289,6 +2324,23 @@ app.get('/api/spending', async (req, res) => {
         } else {
             console.error('Budgets query failed:', err.message);
             errorLog.push(`Budgets: ${err.message}`);
+        }
+    }
+
+    // 3. Apply manual budget override if configured
+    const manualLimit = process.env.AWS_BUDGET_LIMIT ? parseFloat(process.env.AWS_BUDGET_LIMIT) : null;
+    if (manualLimit !== null && !isNaN(manualLimit) && manualLimit > 0) {
+        if (budgetData) {
+            budgetData.limit = manualLimit.toFixed(2);
+            budgetData.name = `${budgetData.name} (Manual Limit)`;
+        } else {
+            budgetData = {
+                name: "Manual AWS Budget",
+                limit: manualLimit.toFixed(2),
+                spent: costData ? parseFloat(costData.amount).toFixed(2) : "0.00",
+                currency: costData ? costData.currency : "USD",
+                isMock: false
+            };
         }
     }
 
