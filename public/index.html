@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AWS Status Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -1021,8 +1021,9 @@
 
     <script>
         // Check if we are running in static demo mode (e.g. GitHub Pages or local file)
-        const isStaticDemo = window.location.hostname.endsWith('github.io') || 
-                             window.location.hostname.endsWith('githubusercontent.com') ||
+        const isStaticDemo = window.location.hostname === 'github.io' ||
+                             window.location.hostname.endsWith('.github.io') ||
+                             window.location.hostname.endsWith('.githubusercontent.com') ||
                              window.location.protocol === 'file:';
 
         if (isStaticDemo) {
@@ -1684,7 +1685,7 @@
                 </div>`;
             };
             const copyBtn = (label, val) =>
-                `<button onclick="navigator.clipboard.writeText('${val.replace(/'/g,"\\'")}').then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\'></i> Copied!';setTimeout(()=>{this.innerHTML='<i class=\\'fa-solid fa-copy\\'></i> ${label}'},1500)})"
+                `<button onclick="navigator.clipboard.writeText('${String(val).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}').then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\'></i> Copied!';setTimeout(()=>{this.innerHTML='<i class=\\'fa-solid fa-copy\\'></i> ${label}'},1500)})"
                     class="text-[10px] px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600/60 border border-slate-600/40 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5">
                     <i class="fa-solid fa-copy text-xs"></i> ${label}
                 </button>`;

@@ -567,7 +567,7 @@
           });
           
           const data = await res.json();
-          responseEl.innerHTML = `<strong>Ollama (${model}):</strong> ${escapeHtml(data.response)}`;
+          responseEl.innerHTML = `<strong>Ollama (${escapeHtml(model)}):</strong> ${escapeHtml(data.response)}`;
         } catch (err) {
           responseEl.innerHTML = `<strong>Ollama:</strong> <span style="color: var(--red);">Error generating response: ${escapeHtml(err.message)}</span>`;
         }
@@ -729,14 +729,14 @@
       ...options.headers
     };
 
-    // Guard against host injection: resolve path against the API origin and
-    // reject anything that escapes api.github.com (e.g. "@evil.com", "//evil").
-    const apiUrl = new URL(path.startsWith('/') ? path : `/${path}`, 'https://api.github.com');
-    if (apiUrl.origin !== 'https://api.github.com') {
+    // Reject anything that could redirect the request off api.github.com
+    // (absolute URLs, protocol-relative "//host", or userinfo "@host").
+    if (typeof path !== 'string' || /^https?:/i.test(path) || path.startsWith('//') || /[@\\]/.test(path)) {
       throw new Error('Invalid GitHub API path');
     }
+    const safePath = path.startsWith('/') ? path : `/${path}`;
 
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`https://api.github.com${safePath}`, {
       ...options,
       headers
     });
@@ -1293,11 +1293,11 @@
         return `
           <tr>
             <td>
-              <a href="${run.html_url}" target="_blank" style="font-weight:700;">${run.name} (#${run.run_number})</a>
-              <div class="card-desc">SHA: <code>${run.head_sha.substring(0, 7)}</code></div>
+              <a href="${escapeHtml(run.html_url)}" target="_blank" style="font-weight:700;">${escapeHtml(run.name)} (#${run.run_number})</a>
+              <div class="card-desc">SHA: <code>${escapeHtml(String(run.head_sha).substring(0, 7))}</code></div>
             </td>
-            <td><code>${run.head_branch}</code></td>
-            <td><code>${run.event}</code></td>
+            <td><code>${escapeHtml(run.head_branch)}</code></td>
+            <td><code>${escapeHtml(run.event)}</code></td>
             <td>${statusBadge}</td>
             <td>${timeStr}</td>
             <td>

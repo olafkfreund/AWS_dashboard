@@ -564,8 +564,9 @@ Please answer Olaf's questions about any of these resources, pull requests, merg
             const providerVal = providerSelect.value;
             const providerText = providerSelect.options[providerSelect.selectedIndex].text;
             
-            const isStaticDemo = window.location.hostname.endsWith('github.io') || 
-                                 window.location.hostname.endsWith('githubusercontent.com') ||
+            const isStaticDemo = window.location.hostname === 'github.io' ||
+                                 window.location.hostname.endsWith('.github.io') ||
+                                 window.location.hostname.endsWith('.githubusercontent.com') ||
                                  window.location.protocol === 'file:';
 
             try {

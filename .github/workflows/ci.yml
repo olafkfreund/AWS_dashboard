@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+# Least-privilege default token for all jobs.
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     name: Build and Test

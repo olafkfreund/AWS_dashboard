@@ -71,7 +71,7 @@ function compile(sourceDir, targetFile) {
           <input type="checkbox" id="enable-voice-feedback" style="cursor: pointer;">
       </div>
     `;
-    combined = combined.replace('id="copilot-chat-body"', 'id="copilot-chat-body"').replace('<div class="copilot-chat-body"', voiceToggleHtml + '\n<div class="copilot-chat-body"');
+    combined = combined.replace('<div class="copilot-chat-body"', voiceToggleHtml + '\n<div class="copilot-chat-body"');
     
     combined = combined.replace(/<option value="github-copilot">GitHub Copilot<\/option>/g, '<option value="github-copilot" selected>GitHub Copilot</option>');
     
