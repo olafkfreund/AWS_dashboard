@@ -1210,9 +1210,11 @@
         const statusBadge = getPipelineStatusBadge(run.status);
         const timeStr = formatRelativeTime(run.updated_at || run.created_at);
 
+        const projectIdEsc = escapeHtml(String(projectId));
+        const runIdEsc = escapeHtml(String(run.id));
         const cancelBtn = (run.status === 'running' || run.status === 'pending')
-          ? `<button class="btn btn-sm badge-danger" onclick="cancelPipelineRun(${projectId}, ${run.id})">Cancel</button>`
-          : `<button class="btn btn-sm btn-primary" onclick="retryPipeline(${projectId}, ${run.id})">Retry</button>`;
+          ? `<button class="btn btn-sm badge-danger" onclick="cancelPipelineRun('${projectIdEsc}', '${runIdEsc}')">Cancel</button>`
+          : `<button class="btn btn-sm btn-primary" onclick="retryPipeline('${projectIdEsc}', '${runIdEsc}')">Retry</button>`;
 
         return `
           <tr>
@@ -1227,7 +1229,7 @@
             <td>
               <div class="flex-align">
                 ${cancelBtn}
-                <button class="btn btn-sm" onclick="dispatchPipeline(${projectId}, '${escapeHtml(run.ref)}')" title="Trigger pipeline run"><i class="fa-solid fa-rocket"></i> Run</button>
+                <button class="btn btn-sm" onclick="dispatchPipeline('${projectIdEsc}', '${escapeHtml(run.ref)}')" title="Trigger pipeline run"><i class="fa-solid fa-rocket"></i> Run</button>
               </div>
             </td>
           </tr>
