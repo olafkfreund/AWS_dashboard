@@ -1280,14 +1280,16 @@
         const statusBadge = getWorkflowStatusBadge(run.status, run.conclusion);
         const timeStr = formatRelativeTime(run.updated_at);
 
+        const repoFullEsc = escapeHtml(repoFull);
+        const headBranchEsc = escapeHtml(run.head_branch);
         const cancelBtn = (run.status === 'in_progress' || run.status === 'queued')
-          ? `<button class="btn btn-sm badge-danger" onclick="cancelWorkflowRun('${repoFull}', ${run.id})">Cancel</button>`
-          : `<button class="btn btn-sm btn-primary" onclick="reRunWorkflow('${repoFull}', ${run.id})">Re-run</button>`;
+          ? `<button class="btn btn-sm badge-danger" onclick="cancelWorkflowRun('${repoFullEsc}', ${run.id})">Cancel</button>`
+          : `<button class="btn btn-sm btn-primary" onclick="reRunWorkflow('${repoFullEsc}', ${run.id})">Re-run</button>`;
 
         // Find match workflow dispatch capability
         const matchingWorkflow = workflows.find(w => w.id === run.workflow_id);
         const dispatchBtn = (matchingWorkflow && run.event === 'workflow_dispatch')
-          ? `<button class="btn btn-sm" onclick="dispatchWorkflow('${repoFull}', ${run.workflow_id}, '${run.head_branch}')" title="Trigger dispatch run"><i class="fa-solid fa-rocket"></i> Dispatch</button>`
+          ? `<button class="btn btn-sm" onclick="dispatchWorkflow('${repoFullEsc}', ${run.workflow_id}, '${headBranchEsc}')" title="Trigger dispatch run"><i class="fa-solid fa-rocket"></i> Dispatch</button>`
           : '';
 
         return `

@@ -1227,7 +1227,7 @@
             <td>
               <div class="flex-align">
                 ${cancelBtn}
-                <button class="btn btn-sm" onclick="dispatchPipeline(${projectId}, '${run.ref}')" title="Trigger pipeline run"><i class="fa-solid fa-rocket"></i> Run</button>
+                <button class="btn btn-sm" onclick="dispatchPipeline(${projectId}, '${escapeHtml(run.ref)}')" title="Trigger pipeline run"><i class="fa-solid fa-rocket"></i> Run</button>
               </div>
             </td>
           </tr>
