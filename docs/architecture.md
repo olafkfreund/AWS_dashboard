@@ -1,87 +1,103 @@
-# System Architecture & WebMCP
+# System Architecture and Information Flow
 
-This document details the backend proxy model, the WebMCP integration layer, and the static fallback mechanism.
+This document details the architecture design, information flow, data acquisition routes, and design decisions of the AWS Status Dashboard.
 
-## High-Level Overview
+## High-Level Architecture Design
 
-Due to browser sandboxing, static client-side web pages cannot read local AWS credentials (e.g. `~/.aws/credentials`). To circumvent this securely, the project implements a hybrid proxy architecture:
+Due to browser security sandboxing, client-side code running in a browser cannot read local system files (such as `~/.aws/credentials`) or make direct TCP calls to AWS endpoints without triggering CORS violations. 
 
-```
-┌──────────────────┐               ┌──────────────────┐               ┌──────────────┐
-│  Client Browser  │ ────────────> │ Node.js Backend  │ ────────────> │   AWS API    │
-│  (index.html)    │ <──────────── │    (server.js)   │ <──────────── │  (EC2/Trail) │
-└──────────────────┘               └──────────────────┘               └──────────────┘
-         │
-         │ WebMCP (navigator.modelContext)
-         ▼
-┌──────────────────┐
-│  Browser Agent   │
-│ (Claude/Gemini)  │
-└──────────────────┘
-```
+To bridge this gap securely, the portal implements a hybrid proxy model:
 
-1. **Node.js Backend Proxy (`server.js`)**: Runs locally, authenticates using the `Synechron` AWS profile via the AWS SDK, and exposes two core endpoints:
-   - `/api/resources`: Fetching EC2 instance statuses.
-   - `/api/logins`: Fetching recent console logins from CloudTrail.
-2. **Frontend Client (`public/index.html`)**: Fetches data from the local proxy, renders the glassmorphic dashboard, and registers browser tools.
-3. **WebMCP Bridge (`mcp-bridge.js`)**: Declares and registers client-side tools with browser agents so that the agent can retrieve current dashboard telemetry.
+1. **Backend Proxy (Node.js)**: Runs locally on the developer machine or in a container, authenticating against the AWS API using named profile credentials.
+2. **Frontend UI (HTML/JS)**: Fetches aggregated metrics from the backend proxy and renders them in a glassmorphic dashboard interface.
+3. **WebMCP Layer**: Declares WebMCP tools on the client browser context (`navigator.modelContext.registerTool`) so browser-based AI agents can query the live status of the developer environment.
+4. **Model Context Protocol Server**: Runs a parallel stdio-based service (`mcp_server.js`) allowing desktop AI tools (like Claude Desktop) to invoke actions in the environment.
 
 ---
 
-## WebMCP Implementation
+## Authentication and Decision Flow
 
-The frontend utilizes the `navigator.modelContext.registerTool` function to register tools that the browser's AI agent can call. This is declared dynamically:
+Every request to the backend proxy is evaluated by gating middleware to enforce authentication rules before querying AWS resources. The flow of decisions is detailed below:
 
-```javascript
-navigator.modelContext.registerTool({
-  name: "get_aws_resources",
-  description: "Retrieve active running EC2 instances from the AWS status dashboard.",
-  execute: async () => {
-    return JSON.stringify(window.dashboardState.resources);
-  }
-});
+```mermaid
+graph TD
+    Request[Incoming Request] --> RouteCheck{Whitelisted path?\n/login.html, /api/auth/*, static assets}
+    RouteCheck -- Yes --> Next[Process Request]
+    RouteCheck -- No --> CookieCheck{Cookie session_id present?}
+    CookieCheck -- No --> PathCheck{Path starts with /api/*?}
+    CookieCheck -- Yes --> SessionCheck{Session active in cache?}
+    SessionCheck -- Yes --> PopulateUser[Populate req.user] --> Next
+    SessionCheck -- No --> PathCheck
+    PathCheck -- Yes --> Return401[Return JSON 401 Unauthorized]
+    PathCheck -- No --> RedirectLogin[Redirect to /login.html]
 ```
+
+### Authentication Logic
+- **AWS SSO Verification**: Validates whether the local `Synechron` profile credentials are active by executing `aws sts get-caller-identity`. If valid, it establishes a user session.
+- **SSO Refresh**: If verification fails, the portal triggers `aws sso login` to launch the browser authentication flow on the host.
+- **GitHub and GitLab OAuth**: Integrates standard OAuth authorization code grant flows using Client IDs and Client Secrets configured via the platform's settings.
 
 ---
 
-## Static Pages Demo Mode
+## Data Acquisition and Resource Flow
 
-To showcase this application without requiring a running backend proxy (e.g. on GitHub Pages), the client detects if it is hosted on `github.io` or runs from a local `file://` protocol. 
+The portal consolidates information from multiple sources to provide a unified operations view. The diagram below illustrates how data is requested, retrieved, and processed:
 
-When **Demo Mode** is activated:
-- The global `window.fetch` is intercepted.
-- Calls to `/api/resources` and `/api/logins` are intercepted and serve realistic mock telemetry.
-- An orange **"GitHub Pages Demo"** badge appears next to the title.
-- The built-in assistant chatbot falls back to local simulated responses unless a GitHub Personal Access Token is saved in the **Settings** tab to access the live GitHub Models API.
+```mermaid
+sequenceDiagram
+    participant Client as Browser Client
+    participant Proxy as Node.js Backend
+    participant Config as ~/.aws/credentials
+    participant AWS as AWS API Cloud
+    
+    Client->>Proxy: GET /api/resources
+    Proxy->>Proxy: Intercept with Gating Middleware
+    Proxy->>Proxy: Validate Session Cookie
+    Proxy->>Config: Read Named Profile (Synechron)
+    Config-->>Proxy: Return Access Keys & STS Token
+    
+    Proxy->>AWS: EC2: DescribeInstances
+    AWS-->>Proxy: Raw Instances data
+    
+    Proxy->>AWS: EKS: ListClusters & DescribeClusters
+    AWS-->>Proxy: Cluster Metadata & Nodegroups
+    
+    Proxy->>AWS: Lambda: ListFunctions
+    AWS-->>Proxy: Function Details & URLs
+    
+    Proxy->>AWS: CloudFormation: ListStacks
+    AWS-->>Proxy: Live provisioning stacks
+    
+    Proxy->>Proxy: Calculate Cost Estimates
+    Proxy-->>Client: Consolidated JSON Response
+```
+
+### Data Sources and Mappings
+
+| Resource Type | Retrieval Mechanism | AWS API Call | Output Fields Map |
+| :--- | :--- | :--- | :--- |
+| **EC2 Instances** | AWS SDK (`EC2Client`) | `DescribeInstancesCommand` | ID, Name, State, Type, IP, Region, Launch Time |
+| **EKS Clusters** | AWS SDK (`EKSClient`) | `ListClustersCommand` / `DescribeClusterCommand` | Cluster Name, Version, Status, Endpoint, Node Groups |
+| **Lambda Functions** | AWS SDK (`LambdaClient`) | `ListFunctionsCommand` | Function Name, Runtime, Memory, Timeout, Last Modified |
+| **CloudFormation** | AWS SDK (`CloudFormationClient`) | `ListStacksCommand` | Stack Name, Status, Creation Time, Description |
+| **CloudTrail Logins** | AWS SDK (`CloudTrailClient`) | `LookupEventsCommand` (EventName: `ConsoleLogin`) | Username, User Type, Timestamp, Source IP, Status |
+| **Cost Explorer** | AWS SDK (`CostExplorerClient`) | `GetCostAndUsageCommand` | Month-to-date actual costs, currency unit |
+| **AWS Budgets** | AWS SDK (`BudgetsClient`) | `DescribeBudgetsCommand` | Budget Limit, Calculated Spent, Budget Name |
 
 ---
 
-## MCP Server Integration
+## Design Rationale
 
-In addition to client-side WebMCP, this repository hosts a stdio-based **Model Context Protocol (MCP) Server** (`mcp_server.js`). This enables desktop or CLI-based LLM clients (such as Claude Desktop, Cursor, or developer agents) to query your AWS environment directly.
+### 1. fromIni Credentials Resolution
+The backend is initialized using the `fromIni` credential provider rather than hardcoded environment variables. This allows the Node SDK to read from the system's `~/.aws/credentials` file dynamically on every AWS client call. When credentials expire and are renewed (either via CLI or via the portal's SSO refresh button), the backend immediately adopts the new credentials without requiring a server restart.
 
-### Exposed Tools
+### 2. File-Backed Session Store
+To ensure developer sessions survive application restarts (e.g. when changing configuration files), sessions are serialized to `.sessions.json`. Sessions older than 12 hours are purged dynamically on load and save, ensuring data hygiene and security.
 
-1. **`list_ec2_instances`**: Returns active, running EC2 instances with Name, ID, instance type, and IP address.
-2. **`list_console_logins`**: Returns successful CloudTrail console logins from the past 24 hours.
-3. **`trigger_sso_login`**: Refreshes expired AWS SSO sessions by running `aws sso login --profile Synechron` locally.
+### 3. AWS Secrets Manager Integration
+To avoid storing sensitive access tokens and client credentials in plaintext configuration files on the local filesystem (such as `.envrc`), the platform supports vaulting configurations inside AWS Secrets Manager.
+- **Save to Secrets Manager**: The backend serializes the configured Git credentials as a JSON payload, writes them to the specified secret in Secrets Manager, updates the local `.envrc` with only the `AWS_SECRET_NAME`, and strips the actual plaintext secrets.
+- **Load and Autoload**: On startup or manual trigger, the backend queries AWS Secrets Manager using the configured `AWS_SECRET_NAME` to retrieve the JSON payload and apply the configuration variables directly in-memory, keeping disk storage clean.
 
-### Claude Desktop Integration Example
-
-To configure the server in Claude Desktop, add the following to `~/.config/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "aws-dashboard": {
-      "command": "node",
-      "args": ["/home/olafkfreund/Source/Calitii/Synechron-ARC/AWS-dashboard/mcp_server.js"],
-      "env": {
-        "AWS_PROFILE": "Synechron",
-        "AWS_REGION": "us-east-1"
-      }
-    }
-  }
-}
-```
-
+### 4. Decoupled Demo Mode
+For testing environments (e.g. deployment to static GitHub Pages), the client-side JavaScript intercepts `window.fetch`. When local hosting is detected, it returns structured mock JSON matching the format of the backend API, allowing full functionality of the dashboard's layout and components without an active AWS connection.

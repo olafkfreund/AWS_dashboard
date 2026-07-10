@@ -22,6 +22,9 @@
             inherit inputs pkgs;
             modules = [
               ./devenv.nix
+              {
+                devenv.root = builtins.toString ./.;
+              }
             ];
           };
         });

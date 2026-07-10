@@ -1,5 +1,5 @@
 # Use lightweight Node.js base image
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY public/ ./public/
 COPY README.md ./
 
 # Runner stage
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -23,11 +23,11 @@ WORKDIR /app
 COPY --from=builder /app /app
 
 # Expose port
-EXPOSE 3000
+EXPOSE 8889
 
 # Set production environment variables
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8889
 
 # Run the backend proxy server
 CMD ["node", "server.js"]

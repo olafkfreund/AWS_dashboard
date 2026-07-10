@@ -11,7 +11,7 @@ const fs = require("fs");
 
 // Load environment variables from SARC .envrc on startup if we are running in the repo context
 try {
-    const envrcPath = path.join(__dirname, '..', 'SARC', '.envrc');
+    const envrcPath = path.join(__dirname, '..', 'Synechron_ARC', 'sarc', '.envrc');
     if (fs.existsSync(envrcPath)) {
         const content = fs.readFileSync(envrcPath, 'utf8');
         content.split('\n').forEach(line => {
@@ -33,9 +33,17 @@ try {
     console.error('Error parsing .envrc for env vars:', e);
 }
 
-// AWS Configuration using the "Synechron" SSO profile
+// AWS Configuration using the dynamic profile
+const awsProfile = process.env.AWS_PROFILE || 'Synechron';
+
+// Clean up any explicit environment credentials loaded from SARC .envrc
+// to ensure the SDK uses the named profile credentials from ~/.aws instead.
+delete process.env.AWS_ACCESS_KEY_ID;
+delete process.env.AWS_SECRET_ACCESS_KEY;
+delete process.env.AWS_SESSION_TOKEN;
+
 const awsConfig = {
-    credentials: fromIni({ profile: 'Synechron' }),
+    credentials: fromIni({ profile: awsProfile }),
     region: process.env.AWS_REGION || 'us-east-1'
 };
 
@@ -168,7 +176,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         if (name === "trigger_sso_login") {
             return new Promise((resolve) => {
-                exec('aws sso login --profile Synechron', (error, stdout, stderr) => {
+                exec(`aws sso login --profile ${awsProfile}`, (error, stdout, stderr) => {
                     if (error) {
                         resolve({
                             content: [{

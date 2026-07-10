@@ -27,18 +27,18 @@ jobs:
         run: |
           # Spin up server in the background
           # We provide mock env variables so it doesn't fail on missing AWS profiles
-          AWS_ACCESS_KEY_ID=mock AWS_SECRET_ACCESS_KEY=mock AWS_REGION=us-east-1 PORT=3000 node server.js &
+          AWS_ACCESS_KEY_ID=mock AWS_SECRET_ACCESS_KEY=mock AWS_REGION=us-east-1 PORT=8889 node server.js &
           
-          # Wait up to 10 seconds for port 3000 to be ready
+          # Wait up to 10 seconds for port 8889 to be ready
           for i in {1..10}; do
-            if curl -s http://localhost:3000/login.html > /dev/null; then
-              echo "Server successfully listening on port 3000!"
+            if curl -s http://localhost:8889/login.html > /dev/null; then
+              echo "Server successfully listening on port 8889!"
               exit 0
             fi
             echo "Waiting for server to start..."
             sleep 1
           done
-          echo "Error: Server failed to start on port 3000 in time"
+          echo "Error: Server failed to start on port 8889 in time"
           exit 1
 
   dependency-and-security:

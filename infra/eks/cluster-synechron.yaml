@@ -1,0 +1,62 @@
+# Minimal EKS cluster — Synechron account (796973489124)
+# Creates a fresh VPC with public+private subnets across 2 AZs
+# Cost: ~$73/mo (control plane) + ~$12/mo (1× t3.small spot) = ~$85/mo
+# Deploy:  eksctl create cluster -f infra/eks/cluster-synechron.yaml --profile Synechron
+# Destroy: eksctl delete cluster -f infra/eks/cluster-synechron.yaml --profile Synechron
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: synechron-portal-test
+  region: eu-west-2
+  version: "1.31"
+  tags:
+    Project: AWS-Dashboard
+    Environment: test
+    ManagedBy: eksctl
+    Account: Synechron
+
+# Let eksctl create a new VPC — Synechron account has no existing VPCs
+vpc:
+  cidr: "10.10.0.0/16"
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: true
+  nat:
+    gateway: Single   # single NAT GW = cheaper (~$32/mo vs $96/mo for HA)
+
+# No CloudWatch logs (saves cost)
+cloudWatch:
+  clusterLogging:
+    enableTypes: []
+
+# IAM OIDC for service accounts
+iam:
+  withOIDC: true
+
+# Suppress auto-mode warning
+autoModeConfig:
+  enabled: false
+
+managedNodeGroups:
+  - name: ng-spot-small
+    instanceTypes:
+      - t3.small    # 2 vCPU / 2 GiB — minimum viable for EKS system pods
+      - t3.medium   # fallback spot capacity
+    spot: true      # ~70% cheaper than On-Demand
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 20  # GiB
+    privateNetworking: true
+    labels:
+      role: worker
+      environment: test
+    tags:
+      Project: AWS-Dashboard
+      Environment: test
+      Account: Synechron
+    iam:
+      withAddonPolicies:
+        autoScaler: true

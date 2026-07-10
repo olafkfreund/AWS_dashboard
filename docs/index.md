@@ -27,4 +27,4 @@ To run the dashboard locally:
    node server.js
    ```
 3. **Open Browser**:
-   Navigate to `http://localhost:3000`.
+   Navigate to `http://localhost:8889`.
