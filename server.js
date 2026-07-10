@@ -125,6 +125,12 @@ let gitlabClientId = process.env.GITLAB_OAUTH_CLIENT_ID || null;
 let gitlabClientSecret = process.env.GITLAB_OAUTH_CLIENT_SECRET || null;
 let gitlabHost = process.env.GITLAB_OAUTH_HOST || 'gitlab.com';
 
+// Only let a bare hostname (letters, digits, dots, hyphens) reach fetch() URLs.
+// A maliciously-configured OAuth host would otherwise enable SSRF.
+function safeHost(host, fallback) {
+    return /^[a-zA-Z0-9.-]+$/.test(host || '') ? host : fallback;
+}
+
 // Simple custom cookie parser middleware
 app.use((req, res, next) => {
     req.cookies = {};
@@ -275,7 +281,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
     }
     
     try {
-        const tokenUrl = `https://${githubHost}/login/oauth/access_token`;
+        const tokenUrl = `https://${safeHost(githubHost, 'github.com')}/login/oauth/access_token`;
         const tokenRes = await fetch(tokenUrl, {
             method: 'POST',
             headers: {
@@ -298,7 +304,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
         const accessToken = tokenData.access_token;
         
         // Fetch user info
-        const userApiUrl = githubHost === 'github.com' ? 'https://api.github.com/user' : `https://${githubHost}/api/v3/user`;
+        const userApiUrl = githubHost === 'github.com' ? 'https://api.github.com/user' : `https://${safeHost(githubHost, 'github.com')}/api/v3/user`;
         const userRes = await fetch(userApiUrl, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -328,7 +334,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
             createdAt: Date.now()
         });
         
-        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200`);
         saveSessions();
         res.redirect('/');
         
@@ -357,7 +363,7 @@ app.get('/api/auth/gitlab/callback', async (req, res) => {
     
     try {
         const redirectUri = process.env.REDIRECT_URI_GITLAB || `http://localhost:${port}/api/auth/gitlab/callback`;
-        const tokenUrl = `https://${gitlabHost}/oauth/token`;
+        const tokenUrl = `https://${safeHost(gitlabHost, 'gitlab.com')}/oauth/token`;
         const tokenRes = await fetch(tokenUrl, {
             method: 'POST',
             headers: {
@@ -382,7 +388,7 @@ app.get('/api/auth/gitlab/callback', async (req, res) => {
         const accessToken = tokenData.access_token;
         
         // Fetch user info
-        const userApiUrl = `https://${gitlabHost}/api/v4/user`;
+        const userApiUrl = `https://${safeHost(gitlabHost, 'gitlab.com')}/api/v4/user`;
         const userRes = await fetch(userApiUrl, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -407,7 +413,7 @@ app.get('/api/auth/gitlab/callback', async (req, res) => {
             createdAt: Date.now()
         });
         
-        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+        res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200`);
         saveSessions();
         res.redirect('/');
         
@@ -449,7 +455,7 @@ app.post('/api/auth/aws-sso-verify', (req, res) => {
             });
             
             console.log('AWS SSO Verification Succeeded for:', username);
-            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200`);
         saveSessions();
             res.json({ success: true, username });
         } catch (e) {
@@ -640,9 +646,9 @@ app.post('/api/auth/sso/poll', async (req, res) => {
                     });
                     const rolesResponse = await ssoClient.send(listRolesCommand);
                     rolesList = rolesResponse.roleList || [];
-                    console.log(`SSO Diagnostics - Available Roles for Account ${config.accountId}:`, JSON.stringify(rolesList, null, 2));
+                    console.log(`SSO Diagnostics - Loaded ${rolesList.length} available role(s) for the target account.`);
                 } else {
-                    console.warn(`SSO Diagnostics WARNING: Target account ID ${config.accountId} is NOT in the user's assigned accounts list!`);
+                    console.warn(`SSO Diagnostics WARNING: Target account ID is NOT in the user's assigned accounts list!`);
                 }
             } catch (listError) {
                 console.error("SSO Diagnostics - Failed to list accounts/roles:", listError);
@@ -665,7 +671,7 @@ app.post('/api/auth/sso/poll', async (req, res) => {
 
             console.log(`AWS SSO Direct Verification Succeeded for ${username} (using EKS Pod Identity/default role for AWS queries)`);
             
-            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+            res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200`);
             saveSessions();
             res.json({ success: true, status: 'approved', username });
         } catch (credError) {
@@ -1153,7 +1159,7 @@ async function loadTokensFromVault() {
         return;
     }
     try {
-        console.log(`[vault] Attempting to load tokens from AWS secret "${secretName}"...`);
+        console.log('[vault] Attempting to load tokens from AWS Secrets Manager...');
         const res = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretName }));
         if (res.SecretString) {
             const data = JSON.parse(res.SecretString);
@@ -1186,7 +1192,7 @@ async function loadTokensFromVault() {
             }
         }
     } catch (err) {
-        console.error(`[vault] Error autoloading from secret "${secretName}":`, err.message);
+        console.error('[vault] Error autoloading tokens from AWS Secrets Manager:', err.message);
     }
 }
 

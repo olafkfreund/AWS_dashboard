@@ -535,7 +535,7 @@
           });
           
           const data = await res.json();
-          responseEl.innerHTML = `<strong>Ollama (${model}):</strong> ${escapeHtml(data.response)}`;
+          responseEl.innerHTML = `<strong>Ollama (${escapeHtml(model)}):</strong> ${escapeHtml(data.response)}`;
         } catch (err) {
           responseEl.innerHTML = `<strong>Ollama:</strong> <span style="color: var(--red);">Error generating response: ${escapeHtml(err.message)}</span>`;
         }
@@ -1217,11 +1217,11 @@
         return `
           <tr>
             <td>
-              <a href="${run.web_url}" target="_blank" style="font-weight:700;">Pipeline #${run.id}</a>
-              <div class="card-desc">SHA: <code>${run.sha.substring(0, 7)}</code></div>
+              <a href="${escapeHtml(run.web_url)}" target="_blank" style="font-weight:700;">Pipeline #${run.id}</a>
+              <div class="card-desc">SHA: <code>${escapeHtml(String(run.sha).substring(0, 7))}</code></div>
             </td>
-            <td><code>${run.ref}</code></td>
-            <td><code>${run.source || 'push'}</code></td>
+            <td><code>${escapeHtml(run.ref)}</code></td>
+            <td><code>${escapeHtml(run.source || 'push')}</code></td>
             <td>${statusBadge}</td>
             <td>${timeStr}</td>
             <td>
@@ -1235,7 +1235,7 @@
       }).join('');
 
     } catch (err) {
-      el.workflowsRunsTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--red);">Error loading pipelines: ${err.message}</td></tr>`;
+      el.workflowsRunsTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--red);">Error loading pipelines: ${escapeHtml(err.message)}</td></tr>`;
     }
   }
 

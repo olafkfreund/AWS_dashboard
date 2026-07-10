@@ -4,3 +4,8 @@ node_modules/
 *.log
 .server.pid
 .sessions.json
+
+# local infra / dev env (not part of the app)
+deployment/
+.devenv/
+devenv.lock
