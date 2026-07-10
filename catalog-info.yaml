@@ -9,8 +9,8 @@ metadata:
     backstage.io/techdocs-ref: dir:.
     
     # GitHub Integration annotations
-    github.com/project-slug: Olaf-KrasickiFreund_syne/AWS_dashboard
-    backstage.io/source-location: url:https://github.com/Olaf-KrasickiFreund_syne/AWS_dashboard
+    github.com/project-slug: synechron/AWS_dashboard
+    backstage.io/source-location: url:https://github.com/synechron/AWS_dashboard
   tags:
     - aws
     - dashboard
