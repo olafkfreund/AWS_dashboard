@@ -1313,7 +1313,7 @@
       }).join('');
 
     } catch (err) {
-      el.workflowsRunsTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--red);">Error loading workflows: ${err.message}</td></tr>`;
+      el.workflowsRunsTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--red);">Error loading workflows: ${escapeHtml(err.message)}</td></tr>`;
     }
   }
 
