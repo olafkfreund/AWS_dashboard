@@ -176,7 +176,7 @@
         function showError(msg) {
             const alert = document.getElementById('error-alert');
             const message = document.getElementById('error-message');
-            message.innerHTML = msg;
+            message.textContent = msg;
             alert.classList.remove('hidden');
             alert.classList.remove('bg-blue-900/40', 'border-blue-500/50', 'text-blue-200');
             alert.classList.add('bg-red-900/40', 'border-red-500/50', 'text-red-200');

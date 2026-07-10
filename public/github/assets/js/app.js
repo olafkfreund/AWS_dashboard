@@ -569,7 +569,7 @@
           const data = await res.json();
           responseEl.innerHTML = `<strong>Ollama (${model}):</strong> ${escapeHtml(data.response)}`;
         } catch (err) {
-          responseEl.innerHTML = `<strong>Ollama:</strong> <span style="color: var(--red);">Error generating response: ${err.message}</span>`;
+          responseEl.innerHTML = `<strong>Ollama:</strong> <span style="color: var(--red);">Error generating response: ${escapeHtml(err.message)}</span>`;
         }
         
         el.ollamaChatHistory.scrollTop = el.ollamaChatHistory.scrollHeight;
@@ -729,7 +729,14 @@
       ...options.headers
     };
 
-    const response = await fetch(`https://api.github.com${path}`, {
+    // Guard against host injection: resolve path against the API origin and
+    // reject anything that escapes api.github.com (e.g. "@evil.com", "//evil").
+    const apiUrl = new URL(path.startsWith('/') ? path : `/${path}`, 'https://api.github.com');
+    if (apiUrl.origin !== 'https://api.github.com') {
+      throw new Error('Invalid GitHub API path');
+    }
+
+    const response = await fetch(apiUrl, {
       ...options,
       headers
     });
@@ -1790,12 +1797,21 @@
 
       toast.innerHTML = `
         <i class="fa-solid ${iconClass} toast-icon"></i>
-        <div class="toast-content" ${url ? `style="cursor: pointer;" onclick="window.open('${url}', '_blank')"` : ''}>
+        <div class="toast-content"${url ? ' style="cursor: pointer;"' : ''}>
           <div class="toast-title">${escapeHtml(title || '')}</div>
           <div class="toast-message">${escapeHtml(body || '')}</div>
         </div>
-        <button class="toast-close" onclick="this.parentElement.classList.add('toast-fadeOut'); setTimeout(() => this.parentElement.remove(), 300);">&times;</button>
+        <button class="toast-close">&times;</button>
       `;
+
+      // Attach handlers in JS so a tainted `url` can't inject markup/script.
+      if (url) {
+        toast.querySelector('.toast-content').addEventListener('click', () => window.open(url, '_blank'));
+      }
+      toast.querySelector('.toast-close').addEventListener('click', function () {
+        this.parentElement.classList.add('toast-fadeOut');
+        setTimeout(() => this.parentElement.remove(), 300);
+      });
 
       container.appendChild(toast);
 
@@ -1835,7 +1851,9 @@
   async function checkAndNotifyChanges() {
     function getRepoFromUrl(url) {
       if (!url) return '';
-      const parts = url.split(url.includes('api.github.com') ? '/repos/' : 'github.com/');
+      let host = '';
+      try { host = new URL(url).hostname; } catch { return ''; }
+      const parts = url.split(host === 'api.github.com' ? '/repos/' : 'github.com/');
       if (parts.length > 1) {
         return parts[1].split('/').slice(0, 2).join('/');
       }

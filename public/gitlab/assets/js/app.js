@@ -537,7 +537,7 @@
           const data = await res.json();
           responseEl.innerHTML = `<strong>Ollama (${model}):</strong> ${escapeHtml(data.response)}`;
         } catch (err) {
-          responseEl.innerHTML = `<strong>Ollama:</strong> <span style="color: var(--red);">Error generating response: ${err.message}</span>`;
+          responseEl.innerHTML = `<strong>Ollama:</strong> <span style="color: var(--red);">Error generating response: ${escapeHtml(err.message)}</span>`;
         }
         
         el.ollamaChatHistory.scrollTop = el.ollamaChatHistory.scrollHeight;
@@ -1697,12 +1697,21 @@
 
       toast.innerHTML = `
         <i class="fa-solid ${iconClass} toast-icon"></i>
-        <div class="toast-content" ${url ? `style="cursor: pointer;" onclick="window.open('${url}', '_blank')"` : ''}>
+        <div class="toast-content"${url ? ' style="cursor: pointer;"' : ''}>
           <div class="toast-title">${escapeHtml(title || '')}</div>
           <div class="toast-message">${escapeHtml(body || '')}</div>
         </div>
-        <button class="toast-close" onclick="this.parentElement.classList.add('toast-fadeOut'); setTimeout(() => this.parentElement.remove(), 300);">&times;</button>
+        <button class="toast-close">&times;</button>
       `;
+
+      // Attach handlers in JS so a tainted `url` can't inject markup/script.
+      if (url) {
+        toast.querySelector('.toast-content').addEventListener('click', () => window.open(url, '_blank'));
+      }
+      toast.querySelector('.toast-close').addEventListener('click', function () {
+        this.parentElement.classList.add('toast-fadeOut');
+        setTimeout(() => this.parentElement.remove(), 300);
+      });
 
       container.appendChild(toast);
 

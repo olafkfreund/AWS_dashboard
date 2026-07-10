@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -70,6 +71,15 @@ const port = process.env.PORT || 8889;
 
 app.use(cors());
 app.use(express.json());
+
+// Rate limit all API routes (esp. auth + config) to blunt brute-force / abuse.
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300,                 // per IP per window
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/', apiLimiter);
 
 // ── Session store — file-backed so restarts don't log users out ──────────────
 const SESSIONS_FILE = path.join(__dirname, '.sessions.json');
