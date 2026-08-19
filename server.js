@@ -4,6 +4,8 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+// Shared with test/safe-host.test.js so the test covers the shipped code.
+const { safeHost } = require('./lib/safe-host');
 const { exec } = require('child_process');
 const { EKSClient, ListClustersCommand, DescribeClusterCommand, ListNodegroupsCommand, DescribeNodegroupCommand } = require('@aws-sdk/client-eks');
 const { LambdaClient, ListFunctionsCommand, GetFunctionUrlConfigCommand } = require('@aws-sdk/client-lambda');
@@ -135,11 +137,6 @@ let gitlabClientId = process.env.GITLAB_OAUTH_CLIENT_ID || null;
 let gitlabClientSecret = process.env.GITLAB_OAUTH_CLIENT_SECRET || null;
 let gitlabHost = process.env.GITLAB_OAUTH_HOST || 'gitlab.com';
 
-// Only let a bare hostname (letters, digits, dots, hyphens) reach fetch() URLs.
-// A maliciously-configured OAuth host would otherwise enable SSRF.
-function safeHost(host, fallback) {
-    return /^[a-zA-Z0-9.-]+$/.test(host || '') ? host : fallback;
-}
 
 // Simple custom cookie parser middleware
 app.use((req, res, next) => {

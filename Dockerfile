@@ -11,6 +11,7 @@ RUN npm ci --omit=dev
 
 # Copy application code
 COPY server.js ./
+COPY lib/ ./lib/
 COPY public/ ./public/
 COPY README.md ./
 
