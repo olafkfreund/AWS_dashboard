@@ -138,8 +138,13 @@ jobs:
   deploy:
     name: Deploy to EKS
     runs-on: ubuntu-latest
-    # Only ship from main, and only once the app is proven good.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Only ship from main of the canonical repo, and only once the app is
+    # proven good. The public mirror runs this same workflow but must not
+    # (and cannot: the IAM trust policy pins the repo) deploy.
+    if: >-
+      github.repository == 'synechron/AWS_dashboard'
+      && github.ref == 'refs/heads/main'
+      && github.event_name == 'push'
     needs: [build-and-test, dependency-and-security, docker-build]
     environment: production
     permissions:
