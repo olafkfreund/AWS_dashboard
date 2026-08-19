@@ -134,3 +134,72 @@ jobs:
 
       - name: Build Docker Image
         run: docker build -t aws-status-dashboard:test .
+
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    # Only ship from main, and only once the app is proven good.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build-and-test, dependency-and-security, docker-build]
+    environment: production
+    permissions:
+      contents: read
+      id-token: write        # required for AWS OIDC
+    env:
+      AWS_REGION: eu-west-2
+      CLUSTER: aws-dashboard-cluster
+      NAMESPACE: aws-dashboard
+      DEPLOYMENT: portal-deployment
+      CONTAINER: portal
+      ECR_REPO: 796973489124.dkr.ecr.eu-west-2.amazonaws.com/aws-dashboard
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::796973489124:role/github-actions-aws-dashboard
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg BUILD_COMMIT="${GITHUB_SHA}" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "${ECR_REPO}:${GITHUB_SHA}" \
+            -t "${ECR_REPO}:latest" .
+          docker push "${ECR_REPO}:${GITHUB_SHA}"
+          docker push "${ECR_REPO}:latest"
+
+      - name: Deploy to cluster
+        run: |
+          set -euo pipefail
+          aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+          # Immutable tag, so every deploy is a distinct, rollback-able revision.
+          kubectl -n "$NAMESPACE" set image \
+            "deployment/$DEPLOYMENT" "$CONTAINER=${ECR_REPO}:${GITHUB_SHA}"
+          kubectl -n "$NAMESPACE" annotate "deployment/$DEPLOYMENT" \
+            kubernetes.io/change-cause="ci: ${GITHUB_SHA} via run ${GITHUB_RUN_ID}" --overwrite
+          kubectl -n "$NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=5m
+
+      - name: Verify the running build is the one we just pushed
+        run: |
+          set -euo pipefail
+          # Cheap assertion that always works, whatever the RBAC.
+          LIVE=$(kubectl -n "$NAMESPACE" get "deployment/$DEPLOYMENT" \
+                   -o jsonpath="{.spec.template.spec.containers[?(@.name=='$CONTAINER')].image}")
+          echo "live image: $LIVE"
+          [ "$LIVE" = "${ECR_REPO}:${GITHUB_SHA}" ] \
+            || { echo "::error::deployment image is $LIVE, expected ${ECR_REPO}:${GITHUB_SHA}"; exit 1; }
+          POD=$(kubectl -n "$NAMESPACE" get pod -l app=portal \
+                  -o jsonpath='{.items[0].metadata.name}')
+          BODY=$(kubectl -n "$NAMESPACE" exec "$POD" -- \
+                  node -e "fetch('http://localhost:8889/healthz').then(r=>r.text()).then(console.log)")
+          echo "$BODY"
+          echo "$BODY" | grep -q "$GITHUB_SHA" \
+            || { echo "::error::/healthz did not report ${GITHUB_SHA}"; exit 1; }

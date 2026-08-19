@@ -72,6 +72,16 @@ const port = process.env.PORT || 8889;
 app.use(cors());
 app.use(express.json());
 
+// Build identity, stamped at image build time (see .github/workflows/ci.yml).
+const BUILD = {
+    version: require('./package.json').version,
+    commit:  process.env.BUILD_COMMIT  || 'dev',
+    builtAt: process.env.BUILD_TIME    || 'dev',
+};
+
+// Unauthenticated liveness + which build is actually running.
+app.get('/healthz', (req, res) => res.json({ status: 'ok', ...BUILD }));
+
 // Rate limit all API routes (esp. auth + config) to blunt brute-force / abuse.
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes

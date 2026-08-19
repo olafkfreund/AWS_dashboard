@@ -29,5 +29,11 @@ EXPOSE 8889
 ENV NODE_ENV=production
 ENV PORT=8889
 
+# Build identity, injected by CI so /healthz reports the running build.
+ARG BUILD_COMMIT=dev
+ARG BUILD_TIME=dev
+ENV BUILD_COMMIT=$BUILD_COMMIT
+ENV BUILD_TIME=$BUILD_TIME
+
 # Run the backend proxy server
 CMD ["node", "server.js"]
