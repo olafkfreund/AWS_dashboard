@@ -201,10 +201,23 @@ jobs:
           echo "live image: $LIVE"
           [ "$LIVE" = "${ECR_REPO}:${GITHUB_SHA}" ] \
             || { echo "::error::deployment image is $LIVE, expected ${ECR_REPO}:${GITHUB_SHA}"; exit 1; }
-          POD=$(kubectl -n "$NAMESPACE" get pod -l app=portal \
+          # Ask the NEW ReplicaSet's pods specifically. A plain `app=portal`
+          # selector also matches the previous pods while they Terminate, and
+          # those still answer /healthz with the old build.
+          HASH=$(kubectl -n "$NAMESPACE" get rs -l app=portal -o jsonpath="\
+{range .items[?(@.spec.template.spec.containers[0].image=='${ECR_REPO}:${GITHUB_SHA}')]}{.metadata.labels.pod-template-hash}{'\n'}{end}" | head -n1)
+          [ -n "$HASH" ] || { echo "::error::no ReplicaSet found for ${GITHUB_SHA}"; exit 1; }
+          POD=$(kubectl -n "$NAMESPACE" get pod \
+                  -l "app=portal,pod-template-hash=$HASH" \
+                  --field-selector=status.phase=Running \
                   -o jsonpath='{.items[0].metadata.name}')
-          BODY=$(kubectl -n "$NAMESPACE" exec "$POD" -- \
-                  node -e "fetch('http://localhost:8889/healthz').then(r=>r.text()).then(console.log)")
-          echo "$BODY"
-          echo "$BODY" | grep -q "$GITHUB_SHA" \
-            || { echo "::error::/healthz did not report ${GITHUB_SHA}"; exit 1; }
+          echo "probing pod: $POD"
+          for i in 1 2 3 4 5; do
+            BODY=$(kubectl -n "$NAMESPACE" exec "$POD" -- \
+                     node -e "fetch('http://localhost:8889/healthz').then(r=>r.text()).then(console.log)" 2>/dev/null || true)
+            echo "$BODY"
+            case "$BODY" in *"$GITHUB_SHA"*) exit 0 ;; esac
+            sleep 5
+          done
+          echo "::error::/healthz did not report ${GITHUB_SHA}"
+          exit 1
