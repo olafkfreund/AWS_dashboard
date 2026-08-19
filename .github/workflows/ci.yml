@@ -204,8 +204,8 @@ jobs:
           # Ask the NEW ReplicaSet's pods specifically. A plain `app=portal`
           # selector also matches the previous pods while they Terminate, and
           # those still answer /healthz with the old build.
-          HASH=$(kubectl -n "$NAMESPACE" get rs -l app=portal -o jsonpath="\
-{range .items[?(@.spec.template.spec.containers[0].image=='${ECR_REPO}:${GITHUB_SHA}')]}{.metadata.labels.pod-template-hash}{'\n'}{end}" | head -n1)
+          JP="{range .items[?(@.spec.template.spec.containers[0].image=='${ECR_REPO}:${GITHUB_SHA}')]}{.metadata.labels.pod-template-hash}{'\n'}{end}"
+          HASH=$(kubectl -n "$NAMESPACE" get rs -l app=portal -o jsonpath="$JP" | head -n1)
           [ -n "$HASH" ] || { echo "::error::no ReplicaSet found for ${GITHUB_SHA}"; exit 1; }
           POD=$(kubectl -n "$NAMESPACE" get pod \
                   -l "app=portal,pod-template-hash=$HASH" \
