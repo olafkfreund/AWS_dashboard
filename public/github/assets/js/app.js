@@ -3167,9 +3167,13 @@ Use this information to answer user questions about tasks, pull requests, issues
       if (needsFetch) {
         const owners = state.owners && state.owners.length > 0 ? state.owners : [state.user?.login || ''];
         
-        // Fetch recently closed issues/PRs (Lead Time) across owners
+        // Fetch recently closed issues/PRs (Lead Time) across owners.
+        // reason:completed only — issues closed as not_planned are abandoned
+        // work, and the bulk stale-close above closes the OLDEST issues that
+        // way, so counting them would inflate Lead Time whenever the backlog
+        // is tidied.
         const closedPromises = owners.map(owner => 
-          ghFetch(`/search/issues?q=is:closed+user:${owner}&per_page=50`).catch(() => ({ items: [] }))
+          ghFetch(`/search/issues?q=is:closed+reason:completed+user:${owner}&per_page=50`).catch(() => ({ items: [] }))
         );
         const closedResults = await Promise.all(closedPromises);
         state.closedItems = closedResults.flatMap(res => res.items || []);
