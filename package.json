@@ -34,7 +34,7 @@
     "@aws-sdk/client-sso": "^3.1069.0",
     "@aws-sdk/client-sso-oidc": "^3.1069.0",
     "@aws-sdk/credential-providers": "^3.1069.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2"
